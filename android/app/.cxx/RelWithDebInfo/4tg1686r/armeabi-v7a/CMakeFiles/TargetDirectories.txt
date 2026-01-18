@@ -1,0 +1,2 @@
+C:/z_project/healingai/healing_report/android/app/.cxx/RelWithDebInfo/4tg1686r/armeabi-v7a/CMakeFiles/edit_cache.dir
+C:/z_project/healingai/healing_report/android/app/.cxx/RelWithDebInfo/4tg1686r/armeabi-v7a/CMakeFiles/rebuild_cache.dir

@@ -1,0 +1,20 @@
+{
+  "buildFiles": [
+    "C:\\z_program\\flutter\\packages\\flutter_tools\\gradle\\src\\main\\groovy\\CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "C:\\z_program\\Android\\sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+      "-C",
+      "C:\\z_project\\healingai\\healing_report\\android\\app\\.cxx\\RelWithDebInfo\\4tg1686r\\arm64-v8a",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "C:\\z_program\\Android\\sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+    "-C",
+    "C:\\z_project\\healingai\\healing_report\\android\\app\\.cxx\\RelWithDebInfo\\4tg1686r\\arm64-v8a",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {}
+}
