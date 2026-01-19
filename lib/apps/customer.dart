@@ -136,8 +136,24 @@ class CustomerView extends GetView<CustomerCtrl> {
                       })
                   : Text("请先搜索并添加当前预定服务的顾客"),
               const SizedBox(height: 20),
-              if (controller.isRecording.value || controller.isRecordingHrv.value) MyTextH3("检测中……${myCtrl.pureCount.value}，可点击按钮重新开始检测",Colors.red),
+              if (controller.isRecording.value || controller.isRecordingHrv.value) MyTextH3("检测中……${myCtrl.pureCount.value}，可点击按钮重新开始检测", Colors.red),
               if (controller.isRecording.value || controller.isRecordingHrv.value) CircularProgressIndicator(),
+              if (controller.isRecording.value || controller.isRecordingHrv.value)
+                ElevatedButton(
+                  onPressed: () {
+                    Get.defaultDialog(
+                      title: "提示",
+                      middleText: "停止检测将清除已收集数据，确认停止？",
+                      onConfirm: () {
+                        controller.isRecording.value = false;
+                        controller.isRecordingHrv.value = false;
+                        myCtrl.clearData();
+                        Get.back();
+                      },
+                    );
+                  },
+                  child: Text("停止检测"),
+                ),
             ],
           )),
     );
@@ -181,29 +197,45 @@ class CustomerCtrl extends GetxController {
     "sub_title": ["约80分钟", "约40分钟", "约20分钟", "约10分钟", "约  5分钟", "约  3分钟", "约  1分钟"]
   };
   RxInt sampleSize = 128.obs;
-  Map<String, List<double>> sampleData = {
-    "heartRate": [],
-    "hrv": [],
-    "temperature": [],
-    "delta": [],
-    "theta": [],
-    "alpha": [],
-    "beta": [],
-    "gamma": [],
+  Map<String, dynamic> sampleData = {
+    "record_data": {
+      "heartRate": [],
+      "hrv": [],
+      "temperature": [],
+      "delta": [],
+      "theta": [],
+      "alpha": [],
+      "beta": [],
+      "gamma": [],
+    },
+    "record_id": "",
   };
   void clearSampleData() {
-    sampleData.forEach((key, value) => sampleData[key] = []);
+    sampleData["record_data"].forEach((key, value) => sampleData["record_data"][key] = []);
+    sampleData["record_id"] = "";
   }
 
-  void setSampleData(Map<String, List<double>> data) {
-    for (var key in sampleData.keys) {
-      sampleData[key] = data[key]!;
+  void setSampleData(Map<String, dynamic> data) {
+    for (var key in data.keys) {
+      sampleData["record_data"][key] = data[key];
     }
   }
 
-  void saveSampleData() async {
+  Future<void> setRecordId(String fileName, String id) async {
+    if (fileName.isEmpty) return;
+    Map<String, dynamic> data = await Data.read(fileName);
+    if (data.isNotEmpty) {
+      if (sample["size"].contains(data["record_data"]['heartRate'].length)) {
+        data["record_id"] = id.toString();
+        await Data.write(data, fileName);
+      }
+    }
+  }
+
+  Future<void> saveSampleData() async {
     if (phone.value.length == 11) {
-      await Data.write(sampleData, 'recording_${nickname.value}_${phone.value}_${sampleSize.value}_${DateFormat('yyyy-MM-dd').format(DateTime.now())}.json');
+      String fileName = 'recording_${nickname.value}_${phone.value}_${sampleSize.value}_${DateFormat('yyyy-MM-dd').format(DateTime.now())}.json';
+      await Data.write(sampleData, fileName);
     }
   }
 
@@ -213,7 +245,7 @@ class CustomerCtrl extends GetxController {
     }
     Map<String, dynamic> data = await Data.read(fileName);
     if (data.isNotEmpty) {
-      if (sample["size"].contains(data['heartRate'].length)) {
+      if (sample["size"].contains(data["record_data"]['heartRate'].length)) {
         return data;
       }
     }

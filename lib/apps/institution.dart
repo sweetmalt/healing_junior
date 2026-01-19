@@ -377,6 +377,10 @@ class InstitutionView extends GetView<InstitutionCtrl> {
                                         Get.snackbar('输入错误', '手机号为11位数字，密码为8位字符，昵称不能为空，性别必须为0或1');
                                         return;
                                       }
+                                      if (newCustomer['nickname'].contains('_')) {
+                                        Get.snackbar('输入错误', '昵称不能包含下划线');
+                                        return;
+                                      }
                                       //手机号是否可用
                                       if (!controller.isRightCustomerPhone(newCustomer['phone'])) {
                                         Get.snackbar('手机号已被占用', '请使用其他手机号');

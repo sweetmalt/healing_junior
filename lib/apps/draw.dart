@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:get/get.dart';
 import 'package:healing_junior/apps/album.dart';
 import 'package:healing_junior/apps/customer.dart';
@@ -195,41 +196,41 @@ class DrawView extends GetView<DrawCtrl> {
                   : Image.file(File(controller.imagePath.value), width: sideLength, height: sideLength),
             ),
             const SizedBox(height: 40),
-            // controller.imageUrl.value != ""
-            //     ? CircularIconTextButton(
-            //         text: "AI解读",
-            //         icon: controller.isGettingAnalysis.value ? Icons.refresh_rounded : Icons.view_in_ar_rounded,
-            //         onPressed: () async {
-            //           if (controller.isGettingAnalysis.value) {
-            //             Get.snackbar("正在分析", "请稍候……");
-            //             return;
-            //           }
-            //           controller.gettingAnalysisTimer.value = 0;
-            //           controller.isGettingAnalysis.value = true;
-            //           try {
-            //             await controller.analysis();
-            //           } finally {
-            //             controller.isGettingAnalysis.value = false;
-            //           }
-            //         },
-            //       )
-            //     : SizedBox.shrink(),
-            // if (controller.isGettingAnalysis.value) MyTextP1("正在解读请稍后……${controller.gettingAnalysisTimer.value}"),
-            // controller.analysisText.value.isNotEmpty
-            //     ? Container(
-            //         margin: EdgeInsets.all(20),
-            //         child: MarkdownBody(
-            //           data: controller.analysisText.value,
-            //           styleSheet: MarkdownStyleSheet(
-            //             h1: TextStyle(fontSize: 24, color: colorPrimaryContainer, fontWeight: FontWeight.bold),
-            //             h2: TextStyle(fontSize: 20, color: colorPrimaryContainer, fontWeight: FontWeight.bold),
-            //             h3: TextStyle(fontSize: 18, color: colorPrimaryContainer, fontWeight: FontWeight.bold),
-            //             p: TextStyle(fontSize: 16, color: colorPrimaryContainer),
-            //           ),
-            //         ),
-            //       )
-            //     : SizedBox.shrink(),
-            // const SizedBox(height: 20),
+            controller.imageUrl.value != ""
+                ? CircularIconTextButton(
+                    text: "AI解读",
+                    icon: controller.isGettingAnalysis.value ? Icons.refresh_rounded : Icons.view_in_ar_rounded,
+                    onPressed: () async {
+                      if (controller.isGettingAnalysis.value) {
+                        Get.snackbar("正在解读", "请稍候……");
+                        return;
+                      }
+                      controller.gettingAnalysisTimer.value = 0;
+                      controller.isGettingAnalysis.value = true;
+                      try {
+                        await controller.analysis();
+                      } finally {
+                        controller.isGettingAnalysis.value = false;
+                      }
+                    },
+                  )
+                : SizedBox.shrink(),
+            if (controller.isGettingAnalysis.value) MyTextP1("正在解读请稍后……${controller.gettingAnalysisTimer.value}"),
+            controller.analysisText.value.isNotEmpty
+                ? Container(
+                    margin: EdgeInsets.all(20),
+                    child: MarkdownBody(
+                      data: controller.analysisText.value,
+                      styleSheet: MarkdownStyleSheet(
+                        h1: TextStyle(fontSize: 24, color: colorPrimaryContainer, fontWeight: FontWeight.bold),
+                        h2: TextStyle(fontSize: 20, color: colorPrimaryContainer, fontWeight: FontWeight.bold),
+                        h3: TextStyle(fontSize: 18, color: colorPrimaryContainer, fontWeight: FontWeight.bold),
+                        p: TextStyle(fontSize: 16, color: colorPrimaryContainer),
+                      ),
+                    ),
+                  )
+                : SizedBox.shrink(),
+            const SizedBox(height: 20),
             CircularIconTextButton(
               text: "相册",
               icon: Icons.album_rounded,
