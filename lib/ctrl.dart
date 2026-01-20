@@ -711,7 +711,6 @@ class MyCtrl extends GetxController {
                     "beta": bciDataBeta,
                     "gamma": bciDataGamma,
                   });
-                  customerCtrl.saveSampleData();
                 }
               }
             }
@@ -747,7 +746,6 @@ class MyCtrl extends GetxController {
                 "beta": bciDataBeta,
                 "gamma": bciDataGamma,
               });
-              customerCtrl.saveSampleData();
             }
           }
         }

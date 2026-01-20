@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:healing_junior/apps/employee.dart';
+import 'package:healing_junior/apps/record.dart';
 import 'package:healing_junior/ctrl.dart';
 import 'package:healing_junior/data.dart';
 import 'package:healing_junior/view.dart';
@@ -9,10 +10,11 @@ import 'package:intl/intl.dart';
 class CustomerView extends GetView<CustomerCtrl> {
   CustomerView({super.key});
   final myCtrl = Get.put(MyCtrl());
-  final EmployeeCtrl employeeCtrl = Get.put(EmployeeCtrl());
-  final RxBool isLoading = false.obs;
+  final employeeCtrl = Get.put(EmployeeCtrl());
+  final recordCtrl = Get.put(RecordCtrl());
+  final isLoading = false.obs;
   @override
-  final CustomerCtrl controller = Get.put(CustomerCtrl());
+  final controller = Get.put(CustomerCtrl());
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -89,7 +91,17 @@ class CustomerView extends GetView<CustomerCtrl> {
               ),
               ListTile(
                 leading: controller.isLock.value ? Icon(Icons.lock_rounded) : Icon(Icons.lock_open_rounded),
-                title: Text('服务状态: ${controller.isLock.value ? '已锁定' : '正常'}'),
+                title: Text("服务状态: ${controller.isLock.value ? '已锁定' : '正常'}"),
+              ),
+              ListTile(
+                leading: Icon(Icons.grading_rounded),
+                title: Text("检测报告：${controller.recordings.length + recordCtrl.customerRecordFileList.length}条"),
+                subtitle: Text("包含${controller.recordings.length}条在线数据，${recordCtrl.customerRecordFileList.length}条本地数据，点击查看"),
+                onTap: () {
+                  if (controller.recordings.isNotEmpty || recordCtrl.customerRecordFileList.isNotEmpty) {
+                    Get.to(() => RecordView());
+                  }
+                },
               ),
               if (controller.isLoaded.value)
                 ListTile(
@@ -105,7 +117,7 @@ class CustomerView extends GetView<CustomerCtrl> {
                       for (int i = 0; i < CustomerCtrl.sample['size'].length; i++)
                         DropdownMenuItem(
                           value: CustomerCtrl.sample['size'][i],
-                          child: Text('${CustomerCtrl.sample['sub_title'][i]} / 参考活动：${CustomerCtrl.sample['title'][i]}'),
+                          child: Text("${CustomerCtrl.sample['sub_title'][i]} / 参考活动：${CustomerCtrl.sample['title'][i]}"),
                         ),
                     ],
                     onChanged: (value) => controller.sampleSize.value = value!,
@@ -127,6 +139,7 @@ class CustomerView extends GetView<CustomerCtrl> {
                               controller.isRecordingHrv.value = true;
                               Get.back();
                             },
+                            onCancel: () => Get.back(),
                           );
                         } else {
                           myCtrl.clearData();
@@ -140,19 +153,33 @@ class CustomerView extends GetView<CustomerCtrl> {
               if (controller.isRecording.value || controller.isRecordingHrv.value) CircularProgressIndicator(),
               if (controller.isRecording.value || controller.isRecordingHrv.value)
                 ElevatedButton(
-                  onPressed: () {
-                    Get.defaultDialog(
-                      title: "提示",
-                      middleText: "停止检测将清除已收集数据，确认停止？",
-                      onConfirm: () {
-                        controller.isRecording.value = false;
-                        controller.isRecordingHrv.value = false;
-                        myCtrl.clearData();
-                        Get.back();
-                      },
-                    );
-                  },
                   child: Text("停止检测"),
+                  onPressed: () => Get.defaultDialog(
+                    title: "提示",
+                    middleText: "停止检测将清除已收集数据，确认停止？",
+                    onConfirm: () {
+                      controller.isRecording.value = false;
+                      controller.isRecordingHrv.value = false;
+                      myCtrl.clearData();
+                      Get.back();
+                    },
+                    onCancel: () => Get.back(),
+                  ),
+                ),
+              if (controller.isNewSample.value)
+                ElevatedButton(
+                  child: Text("保存检测"),
+                  onPressed: () => Get.defaultDialog(
+                    title: "提示",
+                    middleText: "确认保存本次检测数据？",
+                    onConfirm: () async{
+                      controller.sampleData["employee_phone"] = employeeCtrl.phone.value;
+                      await controller.saveSampleData();
+                      recordCtrl.init();
+                      Get.back();
+                    },
+                    onCancel: () => Get.back(),
+                  ),
                 ),
             ],
           )),
@@ -173,9 +200,35 @@ class CustomerCtrl extends GetxController {
   final RxBool isLoaded = false.obs;
   final RxBool isRecording = false.obs;
   final RxBool isRecordingHrv = false.obs;
+  final sampleSize = 128.obs;
+  final isNewSample = false.obs;
+  final Map<String, dynamic> sampleData = {
+    "record_data": {
+      "heartRate": [],
+      "hrv": [],
+      "temperature": [],
+      "delta": [],
+      "theta": [],
+      "alpha": [],
+      "beta": [],
+      "gamma": [],
+    },
+    "sampleSize": 0,
+    "record_id": "",
+    "record_at": "",
+    "employee_phone": "",
+    "record_file": "",
+    "is_lock": "",
+  };
+  static const Map<String, dynamic> sample = {
+    "size": [4096, 2048, 1024, 512, 256, 128, 64],
+    "title": ["光疗浅睡", "香疗小憩", "音疗正念", "瑜伽( 单人自习、双人互动、群体交流 )", "深呼吸习惯养成训练", "三分钟静息训练", "1分钟快速进入静息状态"],
+    "sub_title": ["约80分钟", "约40分钟", "约20分钟", "约10分钟", "约  5分钟", "约  3分钟", "约  1分钟"]
+  };
   @override
-  Future<void> onInit() async {
+  void onInit() {
     super.onInit();
+    init();
   }
 
   void init() {
@@ -189,70 +242,24 @@ class CustomerCtrl extends GetxController {
     isLock.value = true;
     recordings.clear();
     isLoaded.value = false;
-  }
-
-  static const Map<String, dynamic> sample = {
-    "size": [4096, 2048, 1024, 512, 256, 128, 64],
-    "title": ["光疗浅睡", "香疗小憩", "音疗正念", "瑜伽( 单人自习、双人互动、群体交流 )", "深呼吸习惯养成训练", "三分钟静息训练", "1分钟快速进入静息状态"],
-    "sub_title": ["约80分钟", "约40分钟", "约20分钟", "约10分钟", "约  5分钟", "约  3分钟", "约  1分钟"]
-  };
-  RxInt sampleSize = 128.obs;
-  Map<String, dynamic> sampleData = {
-    "record_data": {
-      "heartRate": [],
-      "hrv": [],
-      "temperature": [],
-      "delta": [],
-      "theta": [],
-      "alpha": [],
-      "beta": [],
-      "gamma": [],
-    },
-    "record_id": "",
-  };
-  void clearSampleData() {
-    sampleData["record_data"].forEach((key, value) => sampleData["record_data"][key] = []);
-    sampleData["record_id"] = "";
+    isRecording.value = false;
+    isRecordingHrv.value = false;
+    sampleSize.value = 128;
+    isNewSample.value = false;
   }
 
   void setSampleData(Map<String, dynamic> data) {
     for (var key in data.keys) {
       sampleData["record_data"][key] = data[key];
     }
-  }
-
-  Future<void> setRecordId(String fileName, String id) async {
-    if (fileName.isEmpty) return;
-    Map<String, dynamic> data = await Data.read(fileName);
-    if (data.isNotEmpty) {
-      if (sample["size"].contains(data["record_data"]['heartRate'].length)) {
-        data["record_id"] = id.toString();
-        await Data.write(data, fileName);
-      }
-    }
+    isNewSample.value = true;
   }
 
   Future<void> saveSampleData() async {
-    if (phone.value.length == 11) {
-      String fileName = 'recording_${nickname.value}_${phone.value}_${sampleSize.value}_${DateFormat('yyyy-MM-dd').format(DateTime.now())}.json';
-      await Data.write(sampleData, fileName);
-    }
-  }
-
-  Future<Map<String, dynamic>> readSampleData(String fileName) async {
-    if (fileName.isEmpty) {
-      return {};
-    }
-    Map<String, dynamic> data = await Data.read(fileName);
-    if (data.isNotEmpty) {
-      if (sample["size"].contains(data["record_data"]['heartRate'].length)) {
-        return data;
-      }
-    }
-    return {};
-  }
-
-  Future<List<String>> readSampleDataFileList() async {
-    return await Data.readFileList('recording_${nickname.value}_${phone.value}_');
+    String fileName = "record_${nickname.value}_${phone.value}_${sampleSize.value}_${DateFormat('yyyy-MM-dd-HH:mm').format(DateTime.now())}.json";
+    sampleData["record_file"] = fileName;
+    sampleData["sampleSize"] = sampleSize.value;
+    await Data.write(sampleData, fileName);
+    isNewSample.value = false;
   }
 }
