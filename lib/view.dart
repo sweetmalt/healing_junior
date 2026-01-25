@@ -89,12 +89,12 @@ class MyView extends GetView<MyCtrl> {
             CircularIconButton(
               icon: Icons.share,
               onPressed: () {
-                if (customerCtrl.nickname.value.isEmpty) {
+                if (customerCtrl.phone.value.isEmpty) {
                   Get.snackbar('提示', '请先添加服务对象');
                   return;
                 }
                 final timestamp = DateTime.now().millisecondsSinceEpoch;
-                controller.shareReport('脑电波与情绪', timestamp);
+                controller.shareReport('脑电波', timestamp);
               },
             ),
             CircularIconButton(
@@ -205,6 +205,7 @@ class MyView extends GetView<MyCtrl> {
               ),
               Visibility(
                   visible: settingCtrl.states[0],
+                  replacement: const SizedBox(height: 0),
                   child: RepaintBoundary(
                       key: controller.expansionKeys[0],
                       child: ExpansionTile(
@@ -229,6 +230,7 @@ class MyView extends GetView<MyCtrl> {
                       ))),
               Visibility(
                 visible: settingCtrl.states[1],
+                replacement: const SizedBox(height: 0),
                 child: RepaintBoundary(
                   key: controller.expansionKeys[1],
                   child: ExpansionTile(
@@ -243,6 +245,7 @@ class MyView extends GetView<MyCtrl> {
               ),
               Visibility(
                 visible: settingCtrl.states[2],
+                replacement: const SizedBox(height: 0),
                 child: RepaintBoundary(
                   key: controller.expansionKeys[2],
                   child: ExpansionTile(
@@ -259,6 +262,7 @@ class MyView extends GetView<MyCtrl> {
               ),
               Visibility(
                 visible: settingCtrl.states[3],
+                replacement: const SizedBox(height: 0),
                 child: RepaintBoundary(
                   key: controller.expansionKeys[3],
                   child: ExpansionTile(
@@ -275,6 +279,7 @@ class MyView extends GetView<MyCtrl> {
               ),
               Visibility(
                 visible: settingCtrl.states[4],
+                replacement: const SizedBox(height: 0),
                 child: RepaintBoundary(
                   key: controller.expansionKeys[4],
                   child: ExpansionTile(
@@ -318,6 +323,7 @@ class MyView extends GetView<MyCtrl> {
               ),
               Visibility(
                 visible: settingCtrl.states[5],
+                replacement: const SizedBox(height: 0),
                 child: RepaintBoundary(
                   key: controller.expansionKeys[5],
                   child: ExpansionTile(
@@ -343,6 +349,7 @@ class MyView extends GetView<MyCtrl> {
               ),
               Visibility(
                 visible: settingCtrl.states[6],
+                replacement: const SizedBox(height: 0),
                 child: RepaintBoundary(
                   key: controller.expansionKeys[6],
                   child: ExpansionTile(
@@ -359,6 +366,7 @@ class MyView extends GetView<MyCtrl> {
               ),
               Visibility(
                 visible: settingCtrl.states[7],
+                replacement: const SizedBox(height: 0),
                 child: RepaintBoundary(
                   key: controller.expansionKeys[7],
                   child: ExpansionTile(
@@ -375,6 +383,7 @@ class MyView extends GetView<MyCtrl> {
               ),
               Visibility(
                 visible: settingCtrl.states[8],
+                replacement: const SizedBox(height: 0),
                 child: RepaintBoundary(
                   key: controller.expansionKeys[8],
                   child: ExpansionTile(
@@ -519,6 +528,7 @@ class MyView extends GetView<MyCtrl> {
               ),
               Visibility(
                 visible: settingCtrl.states[9],
+                replacement: const SizedBox(height: 0),
                 child: RepaintBoundary(
                   key: controller.expansionKeys[9],
                   child: ExpansionTile(
@@ -535,6 +545,7 @@ class MyView extends GetView<MyCtrl> {
               ),
               Visibility(
                 visible: settingCtrl.states[10],
+                replacement: const SizedBox(height: 0),
                 child: RepaintBoundary(
                   key: controller.expansionKeys[10],
                   child: ExpansionTile(
@@ -551,6 +562,7 @@ class MyView extends GetView<MyCtrl> {
               ),
               Visibility(
                 visible: settingCtrl.states[11],
+                replacement: const SizedBox(height: 0),
                 child: RepaintBoundary(
                   key: controller.expansionKeys[11],
                   child: ExpansionTile(
@@ -567,6 +579,7 @@ class MyView extends GetView<MyCtrl> {
               ),
               Visibility(
                 visible: settingCtrl.states[12],
+                replacement: const SizedBox(height: 0),
                 child: RepaintBoundary(
                   key: controller.expansionKeys[12],
                   child: ExpansionTile(
@@ -583,6 +596,7 @@ class MyView extends GetView<MyCtrl> {
               ),
               Visibility(
                 visible: settingCtrl.states[13],
+                replacement: const SizedBox(height: 0),
                 child: RepaintBoundary(
                   key: controller.expansionKeys[13],
                   child: ExpansionTile(
@@ -599,6 +613,7 @@ class MyView extends GetView<MyCtrl> {
               ),
               Visibility(
                 visible: settingCtrl.states[14],
+                replacement: const SizedBox(height: 0),
                 child: RepaintBoundary(
                   key: controller.expansionKeys[14],
                   child: ExpansionTile(

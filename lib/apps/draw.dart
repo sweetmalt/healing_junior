@@ -23,7 +23,6 @@ class DrawView extends GetView<DrawCtrl> {
     double sideLength = MediaQuery.of(context).size.width;
     return Container(
       margin: EdgeInsets.all(10),
-      padding: EdgeInsets.all(10),
       child: Obx(
         () => Column(
           children: [
@@ -32,7 +31,7 @@ class DrawView extends GetView<DrawCtrl> {
               children: [
                 Container(
                   width: 80,
-                  height: 80,
+                  height: 100,
                   padding: EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: Colors.white,
@@ -56,7 +55,7 @@ class DrawView extends GetView<DrawCtrl> {
                 ),
                 Container(
                   width: 80,
-                  height: 80,
+                  height: 100,
                   padding: EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: Colors.white,
@@ -80,7 +79,7 @@ class DrawView extends GetView<DrawCtrl> {
                 ),
                 Container(
                   width: 80,
-                  height: 80,
+                  height: 100,
                   padding: EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: Colors.white,
@@ -104,7 +103,7 @@ class DrawView extends GetView<DrawCtrl> {
                 ),
                 Container(
                   width: 80,
-                  height: 80,
+                  height: 100,
                   padding: EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: Colors.white,
@@ -128,7 +127,7 @@ class DrawView extends GetView<DrawCtrl> {
                 ),
                 Container(
                   width: 80,
-                  height: 80,
+                  height: 100,
                   padding: EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: Colors.white,

@@ -55,6 +55,7 @@ class CustomerView extends GetView<CustomerCtrl> {
                                   controller.recordings.addAll(customer['recordings']);
                                   controller.isLoaded.value = true;
                                   FocusManager.instance.primaryFocus?.unfocus();
+                                  recordCtrl.init();
                                 }
                               } finally {
                                 isLoading.value = false;
@@ -95,13 +96,23 @@ class CustomerView extends GetView<CustomerCtrl> {
               ),
               ListTile(
                 leading: Icon(Icons.grading_rounded),
-                title: Text("检测报告：${controller.recordings.length + recordCtrl.customerRecordFileList.length}条"),
-                subtitle: Text("包含${controller.recordings.length}条在线数据，${recordCtrl.customerRecordFileList.length}条本地数据，点击查看"),
+                title: Text("检测报告：${recordCtrl.customerRecordFileList.length + controller.recordings.length}份"),
+                subtitle: Text("包括：${controller.recordings.length}份云端记录，${recordCtrl.customerRecordFileList.length}份本地记录"),
                 onTap: () {
-                  if (controller.recordings.isNotEmpty || recordCtrl.customerRecordFileList.isNotEmpty) {
+                  if (recordCtrl.customerRecordFileList.isNotEmpty || controller.recordings.isNotEmpty) {
                     Get.to(() => RecordView());
                   }
                 },
+                trailing: (recordCtrl.customerRecordFileList.isNotEmpty || controller.recordings.isNotEmpty)
+                    ? CircularIconButton(
+                        icon: Icons.navigate_next_rounded,
+                        onPressed: () {
+                          if (recordCtrl.customerRecordFileList.isNotEmpty || controller.recordings.isNotEmpty) {
+                            Get.to(() => RecordView());
+                          }
+                        },
+                      )
+                    : SizedBox.shrink(),
               ),
               if (controller.isLoaded.value)
                 ListTile(
@@ -172,7 +183,7 @@ class CustomerView extends GetView<CustomerCtrl> {
                   onPressed: () => Get.defaultDialog(
                     title: "提示",
                     middleText: "确认保存本次检测数据？",
-                    onConfirm: () async{
+                    onConfirm: () async {
                       controller.sampleData["employee_phone"] = employeeCtrl.phone.value;
                       await controller.saveSampleData();
                       recordCtrl.init();
@@ -203,22 +214,13 @@ class CustomerCtrl extends GetxController {
   final sampleSize = 128.obs;
   final isNewSample = false.obs;
   final Map<String, dynamic> sampleData = {
-    "record_data": {
-      "heartRate": [],
-      "hrv": [],
-      "temperature": [],
-      "delta": [],
-      "theta": [],
-      "alpha": [],
-      "beta": [],
-      "gamma": [],
-    },
+    "record_data": {"heartRate": [], "hrv": [], "temperature": [], "delta": [], "theta": [], "alpha": [], "beta": [], "gamma": []},
     "sampleSize": 0,
     "record_id": "",
     "record_at": "",
     "employee_phone": "",
     "record_file": "",
-    "is_lock": "",
+    "is_lock": ""
   };
   static const Map<String, dynamic> sample = {
     "size": [4096, 2048, 1024, 512, 256, 128, 64],

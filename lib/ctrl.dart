@@ -2002,7 +2002,7 @@ class MyCtrl extends GetxController {
       }
       for (String item in messages) {
         double x = double.parse(item);
-        if (x != last) {
+        if ((x - last).abs() >= 1) {
           hrvData.add(x);
           if ((x - last).abs() >= 50) {
             hrvCtrl.nn50.value++;

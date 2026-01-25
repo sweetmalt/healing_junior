@@ -18,7 +18,7 @@ class WuluohaiView extends GetView<WuluohaiCtrl> {
         physics: const NeverScrollableScrollPhysics(),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 3,
-          childAspectRatio: 1.8,
+          childAspectRatio: 1.5,
           mainAxisSpacing: 8,
           crossAxisSpacing: 8,
         ),
@@ -44,8 +44,9 @@ class WuluohaiView extends GetView<WuluohaiCtrl> {
                 ),
                 subtitle: Text(
                   WuluohaiCtrl.musicTitles.values.elementAt(index),
+                  maxLines: 4,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 10,
                     color: colorPrimaryContainer,
                   ),
                 ),

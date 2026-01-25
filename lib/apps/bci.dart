@@ -93,7 +93,7 @@ class BciView extends GetView<BciCtrl> {
                 columnWidths: {
                   0: FixedColumnWidth(40),
                   1: FixedColumnWidth(60),
-                  2: FixedColumnWidth(200),
+                  2: FixedColumnWidth(300),
                 },
                 border: TableBorder.all(color: colorSecondary, width: 1, borderRadius: BorderRadius.circular(10)),
                 children: [

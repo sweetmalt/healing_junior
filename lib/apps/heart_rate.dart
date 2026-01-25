@@ -26,7 +26,7 @@ class HeartRateView extends GetView<HeartRateCtrl> {
               const SizedBox(height: 40),
               Table(
                 defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-                columnWidths: {0: FixedColumnWidth(100), 1: FixedColumnWidth(50), 2: FixedColumnWidth(250)},
+                columnWidths: {0: FixedColumnWidth(100), 1: FixedColumnWidth(50), 2: FixedColumnWidth(300)},
                 border: TableBorder.all(
                   color: colorSecondary,
                   width: 1,

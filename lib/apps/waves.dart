@@ -95,10 +95,10 @@ class WavesView extends GetView<WavesCtrl> {
                     backgroundColor: Colors.black,
                     lineBarsData: [
                       LineChartBarData(
-                          barWidth: 2,
+                          barWidth: 0,
                           spots: controller.dataFlSpotBaseline,
                           show: true,
-                          color: Colors.white,
+                          color: Colors.black,
                           isCurved: false,
                           dotData: const FlDotData(show: true)),
                       LineChartBarData(
@@ -148,13 +148,13 @@ class WavesCtrl extends GetxController {
   final RxBool isFlay = true.obs;
   final RxBool isCurved = true.obs;
   final RxDouble minY = 0.0.obs;
-  final RxDouble maxY = 21.0.obs;
-  RxList<FlSpot> dataFlSpotBaseline = <FlSpot>[].obs;
-  RxList<FlSpot> dataFlSpot0 = <FlSpot>[].obs;
-  RxList<FlSpot> dataFlSpot1 = <FlSpot>[].obs;
-  RxList<FlSpot> dataFlSpot2 = <FlSpot>[].obs;
-  RxList<FlSpot> dataFlSpot3 = <FlSpot>[].obs;
-  RxList<FlSpot> dataFlSpot4 = <FlSpot>[].obs;
+  final RxDouble maxY = 45.0.obs;
+  RxList<FlSpot> dataFlSpotBaseline = <FlSpot>[FlSpot.nullSpot].obs;
+  RxList<FlSpot> dataFlSpot0 = <FlSpot>[FlSpot.nullSpot].obs;
+  RxList<FlSpot> dataFlSpot1 = <FlSpot>[FlSpot.nullSpot].obs;
+  RxList<FlSpot> dataFlSpot2 = <FlSpot>[FlSpot.nullSpot].obs;
+  RxList<FlSpot> dataFlSpot3 = <FlSpot>[FlSpot.nullSpot].obs;
+  RxList<FlSpot> dataFlSpot4 = <FlSpot>[FlSpot.nullSpot].obs;
   final RxBool isShowLine0 = true.obs;
   final RxBool isShowLine1 = true.obs;
   final RxBool isShowLine2 = true.obs;
@@ -235,20 +235,22 @@ class WavesCtrl extends GetxController {
     }
     dataFlSpotBaseline.add(FlSpot(len, 0.0));
     double s = 0.0;
-    s = spots[0] / 10000 + 2.0;
-    s = s > 20.0 ? 20.0 : s;
+    const double u = 40.0;
+    const int b= 10000;
+    s = spots[0] / b + 3.0;
+    s = s > u ? u : s;
     dataFlSpot0.add(FlSpot(len, s));
-    s = spots[1] / 10000 + 5.0;
-    s = s > 20.0 ? 20.0 : s;
+    s = spots[1] / b + 11.0;
+    s = s > u ? u : s;
     dataFlSpot1.add(FlSpot(len, s));
-    s = spots[2] / 10000 + 9.0;
-    s = s > 20.0 ? 20.0 : s;
+    s = spots[2] / b + 19.0;
+    s = s > u ? u : s;
     dataFlSpot2.add(FlSpot(len, s));
-    s = spots[3] / 10000 + 13.0;
-    s = s > 20.0 ? 20.0 : s;
+    s = spots[3] / b + 27.0;
+    s = s > u ? u : s;
     dataFlSpot3.add(FlSpot(len, s));
-    s = spots[4] / 10000 + 15.0;
-    s = s > 20.0 ? 20.0 : s;
+    s = spots[4] / b + 35.0;
+    s = s > u ? u : s;
     dataFlSpot4.add(FlSpot(len, s));
     return true;
   }
@@ -290,5 +292,11 @@ class WavesCtrl extends GetxController {
     dataFlSpot2.clear();
     dataFlSpot3.clear();
     dataFlSpot4.clear();
+    dataFlSpotBaseline.add(FlSpot.nullSpot);
+    dataFlSpot0.add(FlSpot.nullSpot);
+    dataFlSpot1.add(FlSpot.nullSpot);
+    dataFlSpot2.add(FlSpot.nullSpot);
+    dataFlSpot3.add(FlSpot.nullSpot);
+    dataFlSpot4.add(FlSpot.nullSpot);
   }
 }

@@ -29,7 +29,7 @@ class HrvView extends GetView<HrvCtrl> {
               const SizedBox(height: 40),
               Table(
                 defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-                columnWidths: {0: FixedColumnWidth(20), 1: FixedColumnWidth(120), 2: FixedColumnWidth(100), 3: FixedColumnWidth(100)},
+                columnWidths: {0: FixedColumnWidth(20), 1: FixedColumnWidth(120), 2: FixedColumnWidth(100), 3: FixedColumnWidth(120)},
                 border: TableBorder.all(color: colorSecondary, width: 1, borderRadius: BorderRadius.circular(5)),
                 children: [
                   TableRow(children: [

@@ -50,7 +50,7 @@ class Data {
 
   static Future<String> path(String fileName) async {
     if (fileName.isEmpty) {
-      throw ArgumentError('文件名不能为空');
+      return '';
     }
     final directory = await getApplicationDocumentsDirectory();
     return '${directory.path}/$fileName';
@@ -58,16 +58,35 @@ class Data {
 
   static Future<bool> exists(String fileName) async {
     if (fileName.isEmpty) {
-      throw ArgumentError('文件名不能为空');
+      return false;
     }
     final directory = await getApplicationDocumentsDirectory();
     final file = File('${directory.path}/$fileName');
     return await file.exists();
   }
 
+  static Future<bool> rename(String fileName, String newFileName) async {
+    if (fileName.isEmpty || newFileName.isEmpty) {
+      return false;
+    }
+    if (fileName == newFileName) {
+      return false;
+    }
+    final directory = await getApplicationDocumentsDirectory();
+    final newFile = File('${directory.path}/$newFileName');
+    if (await newFile.exists()) {
+      return false;
+    }
+    final file = File('${directory.path}/$fileName');
+    await file.rename(newFile.path);
+
+    debugPrint(newFile.path);
+    return true;
+  }
+
   static Future<Map<String, dynamic>> read(String jsonFileName) async {
     if (jsonFileName.isEmpty) {
-      throw ArgumentError('文件名不能为空');
+      return {};
     }
     try {
       final directory = await getApplicationDocumentsDirectory();
@@ -85,7 +104,7 @@ class Data {
 
   static Future<List<String>> readFileList(String startKeyword) async {
     if (startKeyword.isEmpty) {
-      throw ArgumentError('文件名前缀关键词不能为空');
+      return [];
     }
     try {
       final directory = await getApplicationDocumentsDirectory();
@@ -109,7 +128,7 @@ class Data {
 
   static Future<bool> delete(String fileName) async {
     if (fileName.isEmpty) {
-      throw ArgumentError('文件名不能为空');
+      return false;
     }
     try {
       final directory = await getApplicationDocumentsDirectory();
@@ -123,7 +142,7 @@ class Data {
 
   static Future<bool> write(Map<String, dynamic> data, String jsonFileName) async {
     if (jsonFileName.isEmpty) {
-      throw ArgumentError('文件名不能为空');
+      return false;
     }
     try {
       final directory = await getApplicationDocumentsDirectory();
@@ -745,13 +764,9 @@ class Data {
     final dio = Dio();
     try {
       final response = await dio.get('http://43.139.97.199/brain/api/test/');
-      if (kDebugMode) {
-        print('Response: ${response.data}');
-      }
+      debugPrint('Response: ${response.data}');
     } catch (e) {
-      if (kDebugMode) {
-        print('Error: $e');
-      }
+      debugPrint('Error: $e');
     }
   }
 }

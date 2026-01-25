@@ -22,7 +22,7 @@ class BrainLoadView extends GetView<BrainLoadCtrl> {
           const SizedBox(height: 20),
           Table(
             defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-            columnWidths: {0: FixedColumnWidth(80), 1: FixedColumnWidth(80), 2: FixedColumnWidth(240)},
+            columnWidths: {0: FixedColumnWidth(100), 1: FixedColumnWidth(80), 2: FixedColumnWidth(240)},
             border: TableBorder.all(color: colorSecondary, width: 2, borderRadius: BorderRadius.circular(5)),
             children: [
               TableRow(children: [
