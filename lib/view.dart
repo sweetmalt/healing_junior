@@ -109,7 +109,7 @@ class MyView extends GetView<MyCtrl> {
                   constraints: BoxConstraints(
                     maxHeight: MediaQuery.of(context).size.height * 0.8,
                   ),
-                  builder: (context) {
+                  builder: (BuildContext context) {
                     return PdfListView();
                   },
                 );
@@ -127,7 +127,7 @@ class MyView extends GetView<MyCtrl> {
                   constraints: BoxConstraints(
                     maxHeight: MediaQuery.of(context).size.height * 0.8,
                   ),
-                  builder: (context) {
+                  builder: (BuildContext context) {
                     return EmployeeView();
                   },
                 );
@@ -147,7 +147,7 @@ class MyView extends GetView<MyCtrl> {
                   constraints: BoxConstraints(
                     maxHeight: MediaQuery.of(context).size.height * 0.8,
                   ),
-                  builder: (context) {
+                  builder: (BuildContext context) {
                     return InstitutionView();
                   },
                 );

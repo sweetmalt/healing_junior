@@ -41,7 +41,7 @@ class RecordView extends GetView<RecordCtrl> {
                   constraints: BoxConstraints(
                     maxHeight: MediaQuery.of(context).size.height * 0.8,
                   ),
-                  builder: (context) {
+                  builder: (BuildContext context) {
                     return RecordList();
                   });
             },
@@ -1384,7 +1384,7 @@ class RecordList extends GetView<RecordCtrl> {
                       return ListTile(
                         leading: Icon(Icons.cloud_queue_rounded),
                         title: Text(customerCtrl.nickname.value),
-                        subtitle: Text(DateFormat('yyyy-MM-dd-HH:mm').format(DateTime.parse(customerCtrl.recordings[index]["record_at"]))),
+                        subtitle: Text(DateFormat('yyyy-MM-dd-HH:mm').format(DateTime.parse(customerCtrl.recordings[index]["record_at"]).toLocal())),
                         onTap: () async {
                           if (isDownloading.value) {
                             Get.snackbar("提示", "正在下载中，请稍后……");

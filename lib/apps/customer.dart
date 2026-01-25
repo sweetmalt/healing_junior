@@ -48,9 +48,9 @@ class CustomerView extends GetView<CustomerCtrl> {
                                   controller.nickname.value = customer['nickname'];
                                   controller.phone.value = customer['phone'];
                                   controller.sex.value = customer['sex'] == 0 ? "女" : "男";
-                                  controller.birthday.value = DateFormat('yyyy-MM-dd').format(DateTime.parse(customer['birthday']));
+                                  controller.birthday.value = DateFormat('yyyy-MM-dd').format(DateTime.parse(customer['birthday']).toLocal());
                                   controller.age.value = Data.calculateAge(DateTime.parse(customer['birthday']));
-                                  controller.recordLastAt.value = DateFormat('yyyy-MM-dd').format(DateTime.parse(customer['record_last_at']));
+                                  controller.recordLastAt.value = DateFormat('yyyy-MM-dd').format(DateTime.parse(customer['record_last_at']).toLocal());
                                   controller.isLock.value = customer['is_lock'];
                                   controller.recordings.addAll(customer['recordings']);
                                   controller.isLoaded.value = true;
