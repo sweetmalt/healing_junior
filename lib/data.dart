@@ -12,14 +12,6 @@ import 'package:scidart/numdart.dart';
 import 'package:scidart/scidart.dart';
 import 'package:image_gallery_saver_plus/image_gallery_saver_plus.dart';
 
-// class MemoryCache {
-//   static final _cache = <String, dynamic>{};
-//   bool containsKey(String key) => _cache.containsKey(key);
-//   dynamic get(String key) => _cache[key];
-//   void put(String key, dynamic value) => _cache[key] = value;
-//   void clear() => _cache.clear();
-// }
-
 class Data {
   Data();
   @override

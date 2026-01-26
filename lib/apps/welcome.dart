@@ -43,15 +43,6 @@ class WelcomeView extends GetView<WelcomeCtrl> {
           ),
           MyTextH3("欢迎使用 ${controller.project} 的 ${controller.app} APP", colorPrimaryContainer),
           MyTextP3(controller.title, colorPrimaryContainer),
-          // const SizedBox(height: 20),
-          // Image.asset("assets/images/brain.png", width: 80, height: 80),
-          // const SizedBox(height: 20),
-          // ElevatedButton(
-          //   onPressed: () {
-          //     indexCtrl.updateIndex(1);
-          //   },
-          //   child: MyTextP2("立即进入"),
-          // ),
         ],
       ),
     );

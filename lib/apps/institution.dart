@@ -30,6 +30,16 @@ class InstitutionView extends GetView<InstitutionCtrl> {
       appBar: AppBar(
         title: const Text("我的组织"),
         backgroundColor: colorSecondary,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back_ios_rounded),
+          onPressed: () => Get.back(),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back_ios_rounded),
+            onPressed: () => Get.back(),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         child: Obx(() => Column(

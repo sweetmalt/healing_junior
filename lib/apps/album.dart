@@ -18,15 +18,15 @@ class AlbumView extends GetView<AlbumController> {
     return Scaffold(
       appBar: AppBar(
         title: Text('相册'),
+        backgroundColor: colorSecondary,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back_ios_rounded),
+          onPressed: () => Get.back(),
+        ),
         actions: [
           IconButton(
-            icon: const Icon(
-              Icons.arrow_back_ios_rounded,
-              size: 30,
-            ),
-            onPressed: () {
-              Get.back();
-            },
+            icon: const Icon(Icons.arrow_back_ios_rounded),
+            onPressed: () => Get.back(),
           ),
         ],
       ),

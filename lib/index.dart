@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:healing_junior/apps/setting.dart';
 import 'package:healing_junior/apps/welcome.dart';
-import 'package:healing_junior/services/update_service.dart';
 import 'package:healing_junior/view.dart';
 
 class IndexView extends GetView<IndexCtrl> {
@@ -11,7 +10,6 @@ class IndexView extends GetView<IndexCtrl> {
   final IndexCtrl controller = Get.put(IndexCtrl());
   @override
   Widget build(BuildContext context) {
-    UpdateService(context).checkUpdate();
     return Scaffold(
       body: Obx(() => IndexedStack(
         index: controller.index.value,

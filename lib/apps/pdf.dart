@@ -53,23 +53,16 @@ class PdfListView extends GetView<PdfController> {
   Widget build(BuildContext context) {
     return Scaffold(
         appBar: AppBar(
-          title: Text(
-            controller.title,
-            style: TextStyle(
-              fontSize: 20,
-              color: ThemeData().colorScheme.primary,
-              fontWeight: FontWeight.bold,
-            ),
+          title: Text(controller.title),
+          backgroundColor: colorSecondary,
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back_ios_rounded),
+            onPressed: () => Get.back(),
           ),
           actions: [
             IconButton(
-              icon: const Icon(
-                Icons.arrow_back_ios_rounded,
-                size: 30,
-              ),
-              onPressed: () {
-                Get.back();
-              },
+              icon: const Icon(Icons.arrow_back_ios_rounded),
+              onPressed: () => Get.back(),
             ),
           ],
         ),

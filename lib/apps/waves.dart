@@ -255,36 +255,6 @@ class WavesCtrl extends GetxController {
     return true;
   }
 
-  // bool addSpotsSign(List<double> spots) {
-  //   if (spots.length != 5) {
-  //     return false;
-  //   }
-  //   double len = dataFlSpotBaseline.length.toDouble();
-  //   dataFlSpotBaseline.add(FlSpot(len, 0.0));
-  //   double s = 0.0;
-  //   s = spots[0];
-  //   s = s > maxY.value ? maxY.value : s;
-  //   s = s < minY.value ? minY.value : s;
-  //   dataFlSpot0.add(FlSpot(len, s));
-  //   s = spots[1];
-  //   s = s > maxY.value ? maxY.value : s;
-  //   s = s < minY.value ? minY.value : s;
-  //   dataFlSpot1.add(FlSpot(len, s));
-  //   s = spots[2];
-  //   s = s > maxY.value ? maxY.value : s;
-  //   s = s < minY.value ? minY.value : s;
-  //   dataFlSpot2.add(FlSpot(len, s));
-  //   s = spots[3];
-  //   s = s > maxY.value ? maxY.value : s;
-  //   s = s < minY.value ? minY.value : s;
-  //   dataFlSpot3.add(FlSpot(len, s));
-  //   s = spots[4];
-  //   s = s > maxY.value ? maxY.value : s;
-  //   s = s < minY.value ? minY.value : s;
-  //   dataFlSpot4.add(FlSpot(len, s));
-  //   return true;
-  // }
-
   void clearSpots() {
     dataFlSpotBaseline.clear();
     dataFlSpot0.clear();
