@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:healing_junior/apps/ai_audio.dart';
 import 'package:healing_junior/view.dart';
 
 class WuluohaiView extends GetView<WuluohaiCtrl> {
@@ -28,10 +29,13 @@ class WuluohaiView extends GetView<WuluohaiCtrl> {
               elevation: 2,
               child: ListTile(
                 leading: controller.selectedIndex.value == index
-                    ? Icon(
-                        Icons.check_circle,
+                    ? IconButton(
+                        onPressed: () {
+                          Get.to(() => AiAudioView());
+                        },
+                        icon: Icon(Icons.play_circle_filled_rounded),
                         color: colorSecondary,
-                        size: 20,
+                        iconSize: 40,
                       )
                     : Icon(
                         Icons.music_note,
@@ -83,8 +87,8 @@ class WuluohaiCtrl extends GetxController {
     "专注力": "全身心投入某件事，不受外界干扰，保持高度注意，高效完成任务。",
     "创造力": "激发创新思维，突破常规，产生独特新颖的想法和解决方案。",
     "洞察力": "深入观察和理解事物本质，敏锐捕捉细节，洞察人心和局势。",
-    "空": "内心虚无，放下执念，以空灵的心态接纳万物，感悟生命真谛。",
-    "悟": "经过思考和体验，突然领悟道理，实现心灵的升华和成长。",
+    "空性": "内心虚无，放下执念，以空灵的心态接纳万物，感悟生命真谛。",
+    "悟性": "经过思考和体验，突然领悟道理，实现心灵的升华和成长。",
     "云游": "仿佛灵魂脱离肉体，在想象的空间中自由遨游，感受无拘无束，想象驰骋。",
     "筑梦": "怀揣梦想，努力构建未来蓝图，充满希望前行，追逐理想。",
   };

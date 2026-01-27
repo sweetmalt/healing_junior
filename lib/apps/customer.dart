@@ -214,7 +214,18 @@ class CustomerCtrl extends GetxController {
   final sampleSize = 128.obs;
   final isNewSample = false.obs;
   final Map<String, dynamic> sampleData = {
-    "record_data": {"heartRate": [], "hrv": [], "temperature": [], "delta": [], "theta": [], "alpha": [], "beta": [], "gamma": []},
+    "record_data": {
+      "heartRate": [],
+      "hrv": [],
+      "temperature": [],
+      "delta": [],
+      "theta": [],
+      "alpha": [],
+      "beta": [],
+      "gamma": [],
+      "iamge_arg": [],
+      "audio_arg": [],
+    },
     "sampleSize": 0,
     "record_id": "",
     "record_at": "",

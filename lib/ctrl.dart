@@ -310,6 +310,8 @@ class MyCtrl extends GetxController {
                     "alpha": bciDataAlpha,
                     "beta": bciDataBeta,
                     "gamma": bciDataGamma,
+                    "iamge_arg": [drawCtrl.att.value, drawCtrl.med.value, drawCtrl.rel.value, drawCtrl.flu.value, drawCtrl.hap.value],
+                    "audio_arg": [wuluohaiCtrl.selectedIndex.value],
                   });
                 }
               }
@@ -345,6 +347,8 @@ class MyCtrl extends GetxController {
                 "alpha": bciDataAlpha,
                 "beta": bciDataBeta,
                 "gamma": bciDataGamma,
+                "iamge_arg": [drawCtrl.att.value, drawCtrl.med.value, drawCtrl.rel.value, drawCtrl.flu.value, drawCtrl.hap.value],
+                "audio_arg": [wuluohaiCtrl.selectedIndex.value],
               });
             }
           }

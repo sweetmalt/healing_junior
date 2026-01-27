@@ -243,6 +243,7 @@ class DrawView extends GetView<DrawCtrl> {
 }
 
 class DrawCtrl extends GetxController {
+  static const String cozeBot = "7509773070840922149";
   Timer? _timer;
   final isGettingImage = false.obs;
   final isImageExists = false.obs;
@@ -320,7 +321,7 @@ class DrawCtrl extends GetxController {
     String prompt = "$imagePrompt $randomStr $randomStr2";
     try {
       isImageExists.value = false;
-      imageUrl.value = await Data.generateAiImage("7509773070840922149", prompt, bearer.value);
+      imageUrl.value = await Data.generateAiImage(cozeBot, prompt, bearer.value);
       if (imageUrl.value.length > 20) {
         Get.snackbar("成功", "图片已生成，正在下载到本机，请耐心等候……");
         String sexandgae = "性别${customerCtrl.sex.value} 年龄${customerCtrl.age.value}岁";

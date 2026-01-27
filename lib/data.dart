@@ -469,31 +469,7 @@ class Data {
     }
   }
 
-  // static Future<void> downloadAndSaveImage(String imageUrl, String savePath) async {
-  //   if (imageUrl.isEmpty || savePath.isEmpty) {
-  //     return;
-  //   }
-  //   try {
-  //     // 发送HTTP GET请求获取图片数据
-  //     final response = await http.get(Uri.parse(imageUrl));
-  //     if (response.statusCode == 200) {
-  //       // 将图片数据写入文件
-  //       final file = File(savePath);
-  //       await file.writeAsBytes(response.bodyBytes);
-  //       if (kDebugMode) {
-  //         print('图片保存成功: $savePath');
-  //       }
-  //     } else {
-  //       if (kDebugMode) {
-  //         print('图片下载失败，状态码: ${response.statusCode}');
-  //       }
-  //     }
-  //   } catch (e) {
-  //     if (kDebugMode) {
-  //       print('图片下载或保存过程中发生错误: $e');
-  //     }
-  //   }
-  // }
+
 
   static Future<bool> downloadAndSaveImage(String imageUrl, String savePath) async {
     if (imageUrl.isEmpty || savePath.isEmpty) return false;
