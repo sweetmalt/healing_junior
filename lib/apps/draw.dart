@@ -333,10 +333,8 @@ class DrawCtrl extends GetxController {
           if (await Data.downloadAndSaveImage(imageUrl.value, savePath)) {
             imagePath.value = savePath;
             isImageExists.value = true;
-            if (await Data.saveImageToGallery(savePath)) {
-              save();
-              employeeCtrl.paymentTemp.value -= 2;
-            }
+            save();
+            employeeCtrl.paymentTemp.value -= 2;
           }
         }
       }

@@ -7,6 +7,8 @@ import 'package:healing_junior/view.dart';
 
 class WuluohaiView extends GetView<WuluohaiCtrl> {
   WuluohaiView({super.key});
+
+  final aiAudioCtrl = Get.put(AiAudioCtrl());
   @override
   final WuluohaiCtrl controller = Get.put(WuluohaiCtrl());
   @override
@@ -30,7 +32,8 @@ class WuluohaiView extends GetView<WuluohaiCtrl> {
               child: ListTile(
                 leading: controller.selectedIndex.value == index
                     ? IconButton(
-                        onPressed: () {
+                        onPressed: ()async {
+                          await aiAudioCtrl.stop();
                           Get.to(() => AiAudioView());
                         },
                         icon: Icon(Icons.play_circle_filled_rounded),

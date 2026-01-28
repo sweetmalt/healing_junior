@@ -20,12 +20,16 @@ class AiAudioView extends GetView<AiAudioCtrl> {
         title: const Text("AI 音频"),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_rounded),
-          onPressed: () => Get.back(),
+          onPressed: () {
+            Get.back();
+          },
         ),
         actions: [
           IconButton(
             icon: const Icon(Icons.arrow_back_ios_rounded),
-            onPressed: () => Get.back(),
+            onPressed: () {
+              Get.back();
+            },
           ),
         ],
       ),
@@ -46,6 +50,14 @@ class AiAudioView extends GetView<AiAudioCtrl> {
                       },
                       icon: Icon(controller.isPlaying.value ? Icons.pause_circle_outline_rounded : Icons.play_circle_outline_rounded)),
                 if (controller.isLoading.value) CircularProgressIndicator(),
+                if (controller.audioUrl.value.isNotEmpty)
+                  ElevatedButton(
+                      onPressed: () async {
+                        await controller.stop();
+                        controller.audioUrl.value = "";
+                        Get.back();
+                      },
+                      child: Text("删除并退出")),
               ],
             )),
       ),
@@ -107,7 +119,7 @@ class AiAudioCtrl extends GetxController {
 
   Future<void> play() async {
     if (isPlaying.value) {
-      await _audioPlayer.pause();
+      await _audioPlayer.stop();
       isPlaying.value = false;
       return;
     }
@@ -119,5 +131,10 @@ class AiAudioCtrl extends GetxController {
     await _audioPlayer.setLoopMode(LoopMode.one);
     _audioPlayer.play();
     isPlaying.value = true;
+  }
+
+  Future<void> stop() async {
+    await _audioPlayer.stop();
+    isPlaying.value = false;
   }
 }
