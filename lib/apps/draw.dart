@@ -48,7 +48,7 @@ class DrawView extends GetView<DrawCtrl> {
                   child: Column(
                     spacing: 10,
                     children: [
-                      MyTextP2("安全感"),
+                      MyTextP2("专注度"),
                       MyTextH2("${controller.att.value}"),
                     ],
                   ),
@@ -72,7 +72,7 @@ class DrawView extends GetView<DrawCtrl> {
                   child: Column(
                     spacing: 10,
                     children: [
-                      MyTextP2("专注度"),
+                      MyTextP2("安全感"),
                       MyTextH2("${controller.med.value}"),
                     ],
                   ),
