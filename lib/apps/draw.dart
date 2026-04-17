@@ -46,10 +46,11 @@ class DrawView extends GetView<DrawCtrl> {
                     ],
                   ),
                   child: Column(
-                    spacing: 10,
+                    spacing: 1,
                     children: [
                       MyTextP2("专注度"),
                       MyTextH2("${controller.att.value}"),
+                      MyTextP3(DrawCtrl.qualitative(controller.att.value),colorSurface),
                     ],
                   ),
                 ),
@@ -70,10 +71,11 @@ class DrawView extends GetView<DrawCtrl> {
                     ],
                   ),
                   child: Column(
-                    spacing: 10,
+                    spacing: 1,
                     children: [
                       MyTextP2("安全感"),
                       MyTextH2("${controller.med.value}"),
+                      MyTextP3(DrawCtrl.qualitative(controller.med.value),colorSurface),
                     ],
                   ),
                 ),
@@ -94,10 +96,11 @@ class DrawView extends GetView<DrawCtrl> {
                     ],
                   ),
                   child: Column(
-                    spacing: 10,
+                    spacing: 1,
                     children: [
                       MyTextP2("松弛感"),
                       MyTextH2("${controller.rel.value}"),
+                      MyTextP3(DrawCtrl.qualitative(controller.rel.value),colorSurface),
                     ],
                   ),
                 ),
@@ -118,10 +121,11 @@ class DrawView extends GetView<DrawCtrl> {
                     ],
                   ),
                   child: Column(
-                    spacing: 10,
+                    spacing: 1,
                     children: [
                       MyTextP2("心流感"),
                       MyTextH2("${controller.flu.value}"),
+                      MyTextP3(DrawCtrl.qualitative(controller.flu.value),colorSurface),
                     ],
                   ),
                 ),
@@ -142,10 +146,11 @@ class DrawView extends GetView<DrawCtrl> {
                     ],
                   ),
                   child: Column(
-                    spacing: 10,
+                    spacing: 1,
                     children: [
                       MyTextP2("愉悦感"),
                       MyTextH2("${controller.hap.value}"),
+                      MyTextP3(DrawCtrl.qualitative(controller.hap.value),colorSurface),
                     ],
                   ),
                 ),
@@ -333,8 +338,12 @@ class DrawCtrl extends GetxController {
           if (await Data.downloadAndSaveImage(imageUrl.value, savePath)) {
             imagePath.value = savePath;
             isImageExists.value = true;
-            save();
+            await save();
             employeeCtrl.paymentTemp.value -= 2;
+            //如果是安卓平台，则保存到相册
+            if (Platform.isAndroid) {
+              await Data.saveImageToGallery(savePath);
+            }
           }
         }
       }
@@ -398,6 +407,26 @@ class DrawCtrl extends GetxController {
       return {};
     }
     return data[phone];
+  }
+
+  //根据数值返回评价
+  //75-100 偏高
+  //65-74 略高
+  //45-64 均衡
+  //40-44 略低
+  //0-39 偏低
+  static String qualitative(int value) {
+    if (value >= 75) {
+      return "偏高";
+    } else if (value >= 65) {
+      return "略高";
+    } else if (value >= 45) {
+      return "均衡";
+    } else if (value >= 40) {
+      return "略低";
+    } else {
+      return "偏低";
+    }
   }
 
   static const List<String> contentTheme = [

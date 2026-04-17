@@ -45,5 +45,15 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>需要蓝牙连接脑波设备</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>需要蓝牙连接脑波设备</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>需要本地网络广播数据给其他应用</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_brainview._tcp</string>
+	</array>
 </dict>
 </plist>

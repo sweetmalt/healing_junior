@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:healing_junior/apps/employee.dart';
 import 'package:healing_junior/apps/record.dart';
@@ -8,13 +9,56 @@ import 'package:healing_junior/view.dart';
 import 'package:intl/intl.dart';
 
 class CustomerView extends GetView<CustomerCtrl> {
-  CustomerView({super.key});
+  CustomerView({super.key}) {
+    phoneFocus.addListener(() {
+      if (phoneFocus.hasFocus) {
+        () async {
+          final data = await Clipboard.getData(Clipboard.kTextPlain);
+          final text = data?.text ?? '';
+          final match = RegExp(r'\b\d{11}\b').firstMatch(text);
+          if (match != null) {
+            final phone = match.group(0)!;
+            phoneController.text = phone;
+            controller.phone.value = phone;
+            await _searchAndFill(phone);
+          }
+        }();
+      }
+    });
+  }
   final myCtrl = Get.put(MyCtrl());
   final employeeCtrl = Get.put(EmployeeCtrl());
   final recordCtrl = Get.put(RecordCtrl());
   final isLoading = false.obs;
+  final TextEditingController phoneController = TextEditingController();
+  final FocusNode phoneFocus = FocusNode();
   @override
   final controller = Get.put(CustomerCtrl());
+  Future<void> _searchAndFill(String phone) async {
+    if (isLoading.value) return;
+    isLoading.value = true;
+    try {
+      Map<String, dynamic> customer = await employeeCtrl.getCusomer(phone);
+      if (customer.isNotEmpty) {
+        controller.init();
+        controller.id.value = customer['id'];
+        controller.nickname.value = customer['nickname'];
+        controller.phone.value = customer['phone'];
+        controller.sex.value = customer['sex'] == 0 ? "女" : "男";
+        controller.birthday.value = DateFormat('yyyy-MM-dd').format(DateTime.parse(customer['birthday']).toLocal());
+        controller.age.value = Data.calculateAge(DateTime.parse(customer['birthday']));
+        controller.recordLastAt.value = DateFormat('yyyy-MM-dd').format(DateTime.parse(customer['record_last_at']).toLocal());
+        controller.isLock.value = customer['is_lock'];
+        controller.recordings.addAll(customer['recordings']);
+        controller.isLoaded.value = true;
+        FocusManager.instance.primaryFocus?.unfocus();
+        recordCtrl.init();
+      }
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -24,9 +68,10 @@ class CustomerView extends GetView<CustomerCtrl> {
             children: <Widget>[
               ListTile(
                 title: TextFormField(
+                  controller: phoneController,
+                  focusNode: phoneFocus,
                   keyboardType: TextInputType.number,
                   maxLength: 11,
-                  initialValue: controller.phone.value,
                   decoration: InputDecoration(
                     labelText: '输入顾客手机号，查询成功后将自动选为服务对象',
                     border: OutlineInputBorder(),
@@ -39,27 +84,7 @@ class CustomerView extends GetView<CustomerCtrl> {
                                 Get.snackbar('正在查询……', '请稍后再试');
                                 return;
                               }
-                              isLoading.value = true;
-                              try {
-                                Map<String, dynamic> customer = await employeeCtrl.getCusomer(controller.phone.value);
-                                if (customer.isNotEmpty) {
-                                  controller.init();
-                                  controller.id.value = customer['id'];
-                                  controller.nickname.value = customer['nickname'];
-                                  controller.phone.value = customer['phone'];
-                                  controller.sex.value = customer['sex'] == 0 ? "女" : "男";
-                                  controller.birthday.value = DateFormat('yyyy-MM-dd').format(DateTime.parse(customer['birthday']).toLocal());
-                                  controller.age.value = Data.calculateAge(DateTime.parse(customer['birthday']));
-                                  controller.recordLastAt.value = DateFormat('yyyy-MM-dd').format(DateTime.parse(customer['record_last_at']).toLocal());
-                                  controller.isLock.value = customer['is_lock'];
-                                  controller.recordings.addAll(customer['recordings']);
-                                  controller.isLoaded.value = true;
-                                  FocusManager.instance.primaryFocus?.unfocus();
-                                  recordCtrl.init();
-                                }
-                              } finally {
-                                isLoading.value = false;
-                              }
+                              await _searchAndFill(phoneController.text);
                             },
                           ),
                   ),
@@ -100,7 +125,7 @@ class CustomerView extends GetView<CustomerCtrl> {
                 subtitle: Text("包括：${controller.recordings.length}份云端记录，${recordCtrl.customerRecordFileList.length}份本地记录"),
                 onTap: () {
                   if (recordCtrl.customerRecordFileList.isNotEmpty || controller.recordings.isNotEmpty) {
-                    Get.to(() => RecordView());
+                    Get.to(() => RecordAdmin());
                   }
                 },
                 trailing: (recordCtrl.customerRecordFileList.isNotEmpty || controller.recordings.isNotEmpty)
@@ -108,7 +133,7 @@ class CustomerView extends GetView<CustomerCtrl> {
                         icon: Icons.navigate_next_rounded,
                         onPressed: () {
                           if (recordCtrl.customerRecordFileList.isNotEmpty || controller.recordings.isNotEmpty) {
-                            Get.to(() => RecordView());
+                            Get.to(() => RecordAdmin());
                           }
                         },
                       )
@@ -140,14 +165,14 @@ class CustomerView extends GetView<CustomerCtrl> {
                       text: "开始检测",
                       icon: Icons.insights_rounded,
                       onPressed: () {
-                        if (controller.isRecording.value || controller.isRecordingHrv.value) {
+                        if (controller.isRecording.value) {
                           Get.defaultDialog(
                             title: "提示",
                             middleText: "当前检测未完，确认重新开始检测？",
                             onConfirm: () {
                               myCtrl.clearData();
                               controller.isRecording.value = true;
-                              controller.isRecordingHrv.value = true;
+                              //controller.isRecordingHrv.value = true;
                               Get.back();
                             },
                             onCancel: () => Get.back(),
@@ -155,14 +180,14 @@ class CustomerView extends GetView<CustomerCtrl> {
                         } else {
                           myCtrl.clearData();
                           controller.isRecording.value = true;
-                          controller.isRecordingHrv.value = true;
+                          //controller.isRecordingHrv.value = true;
                         }
                       })
                   : Text("请先搜索并添加当前预定服务的顾客"),
               const SizedBox(height: 20),
-              if (controller.isRecording.value || controller.isRecordingHrv.value) MyTextH3("检测中……${myCtrl.pureCount.value}，可点击按钮重新开始检测", Colors.red),
-              if (controller.isRecording.value || controller.isRecordingHrv.value) CircularProgressIndicator(),
-              if (controller.isRecording.value || controller.isRecordingHrv.value)
+              if (controller.isRecording.value) MyTextH3("检测中……${myCtrl.pureCount.value}，可点击按钮重新开始检测", Colors.red),
+              if (controller.isRecording.value) CircularProgressIndicator(),
+              if (controller.isRecording.value)
                 ElevatedButton(
                   child: Text("停止检测"),
                   onPressed: () => Get.defaultDialog(
@@ -170,7 +195,7 @@ class CustomerView extends GetView<CustomerCtrl> {
                     middleText: "停止检测将清除已收集数据，确认停止？",
                     onConfirm: () {
                       controller.isRecording.value = false;
-                      controller.isRecordingHrv.value = false;
+                      //controller.isRecordingHrv.value = false;
                       myCtrl.clearData();
                       Get.back();
                     },
@@ -210,21 +235,19 @@ class CustomerCtrl extends GetxController {
   final RxList<dynamic> recordings = [].obs;
   final RxBool isLoaded = false.obs;
   final RxBool isRecording = false.obs;
-  final RxBool isRecordingHrv = false.obs;
+  //final RxBool isRecordingHrv = false.obs;
   final sampleSize = 128.obs;
   final isNewSample = false.obs;
   final Map<String, dynamic> sampleData = {
     "record_data": {
-      "heartRate": [],
-      "hrv": [],
-      "temperature": [],
       "delta": [],
       "theta": [],
       "alpha": [],
       "beta": [],
       "gamma": [],
-      "iamge_arg": [],
+      "image_arg": [],
       "audio_arg": [],
+      "timestamp": 0,
     },
     "sampleSize": 0,
     "record_id": "",
@@ -256,7 +279,6 @@ class CustomerCtrl extends GetxController {
     recordings.clear();
     isLoaded.value = false;
     isRecording.value = false;
-    isRecordingHrv.value = false;
     sampleSize.value = 128;
     isNewSample.value = false;
   }
@@ -269,8 +291,16 @@ class CustomerCtrl extends GetxController {
   }
 
   Future<void> saveSampleData() async {
-    String fileName = "record_${nickname.value}_${phone.value}_${sampleSize.value}_${DateFormat('yyyy-MM-dd-HH:mm').format(DateTime.now())}.json";
+    final timestamp = sampleData["record_data"]["timestamp"] ?? 0;
+    var dt = DateTime.now();
+    if (timestamp > 0) {
+      dt = DateTime.fromMillisecondsSinceEpoch(timestamp);
+    }
+    final dtStr = DateFormat('yyyy-MM-dd-HH:mm').format(dt);
+
+    final fileName = "record_${nickname.value}_${phone.value}_${sampleSize.value}_$dtStr.json";
     sampleData["record_file"] = fileName;
+    sampleData["record_at"] = dtStr;
     sampleData["sampleSize"] = sampleSize.value;
     await Data.write(sampleData, fileName);
     isNewSample.value = false;

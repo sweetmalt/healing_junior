@@ -16,7 +16,7 @@ class BrainLoadView extends GetView<BrainLoadCtrl> {
         spacing: 10,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Obx(() => MyTextP2("末段均值 / 历史最高值 ：${controller.load.value.toInt()} / ${controller.topLoad.value.toInt()}")),
+          Obx(() => MyTextP2("当下均值 / 历史最高值 ：${controller.load.value.toInt()} / ${controller.topLoad.value.toInt()}")),
           const SizedBox(height: 20),
           Obx(() => CircleMiniContainer("大脑负载", controller.load.value / controller.topLoad.value, true, colorSurface)),
           const SizedBox(height: 20),

@@ -405,14 +405,45 @@ class Data {
       });
 
       final response = await client.send(request);
+      String buffer = '';
       await for (var chunk in response.stream.transform(utf8.decoder)) {
-        List<String> lines = chunk.trim().split('\n');
-        for (var line in lines) {
-          if (line.startsWith('data:')) {
-            String jsonData = line.substring(5);
-            Map<String, dynamic> data = jsonDecode(jsonData);
-            if (data.isNotEmpty && data.containsKey('type') && data['type'] == 'answer' && data.containsKey('content') && data['content'].length > 100) {
-              return data['content'];
+        buffer += chunk;
+        // 查找最后一个换行符，确保处理完整的行
+        int lastNewline = buffer.lastIndexOf('\n');
+        if (lastNewline != -1) {
+          String completePart = buffer.substring(0, lastNewline);
+          buffer = buffer.substring(lastNewline + 1); // 保留不完整的部分
+          List<String> lines = completePart.split('\n');
+          for (var line in lines) {
+            if (line.startsWith('data:')) {
+              String jsonData = line.substring(5).trim();
+              if (jsonData.isNotEmpty && jsonData != '[DONE]') {
+                try {
+                  Map<String, dynamic> data = jsonDecode(jsonData);
+                  if (data.containsKey('type') && data['type'] == 'answer' && data.containsKey('content') && data['content'].length > 100) {
+                    return data['content'];
+                  }
+                } catch (e) {
+                  // 忽略不完整的 JSON 解析错误，继续处理
+                }
+              }
+            }
+          }
+        }
+      }
+// 处理剩余的缓冲区（如果有）
+      List<String> remainingLines = buffer.split('\n');
+      for (var line in remainingLines) {
+        if (line.startsWith('data:')) {
+          String jsonData = line.substring(5).trim();
+          if (jsonData.isNotEmpty && jsonData != '[DONE]') {
+            try {
+              Map<String, dynamic> data = jsonDecode(jsonData);
+              if (data.containsKey('type') && data['type'] == 'answer' && data.containsKey('content') && data['content'].length > 100) {
+                return data['content'];
+              }
+            } catch (e) {
+              // 忽略解析错误
             }
           }
         }
@@ -468,8 +499,6 @@ class Data {
       client.close();
     }
   }
-
-
 
   static Future<bool> downloadAndSaveImage(String imageUrl, String savePath) async {
     if (imageUrl.isEmpty || savePath.isEmpty) return false;

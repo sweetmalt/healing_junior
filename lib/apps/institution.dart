@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:healing_junior/data.dart';
 import 'package:healing_junior/view.dart';
@@ -277,7 +278,13 @@ class InstitutionView extends GetView<InstitutionCtrl> {
                             TableRow(
                               children: [
                                 MyTextP2('${customer['nickname']}'),
-                                MyTextP2('${customer['phone']}'),
+                                TextButton(
+                                  onPressed: () {
+                                    Clipboard.setData(ClipboardData(text: '${customer['phone']}'));
+                                    Get.snackbar('已复制', '${customer['phone']}到剪贴板');
+                                  },
+                                  child: Text('${customer['phone']}'),
+                                ),
                                 MyTextP2(customer['sex'] == 0 ? '女' : '男'),
                                 MyTextP2(DateFormat('yyyy-MM-dd').format(DateTime.parse(customer['birthday']))),
                                 MyTextP2('${Data.calculateAge(DateTime.parse(customer['birthday']))}'),

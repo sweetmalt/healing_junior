@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:healing_junior/apps/employee.dart';
 import 'package:healing_junior/index.dart';
+import 'package:healing_junior/services/bluetooth.dart';
 import 'package:healing_junior/view.dart';
 
 class WelcomeView extends GetView<WelcomeCtrl> {
@@ -14,9 +15,7 @@ class WelcomeView extends GetView<WelcomeCtrl> {
   Widget build(BuildContext context) {
     return Container(
       alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: colorPrimary,
-      ),
+
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -43,6 +42,10 @@ class WelcomeView extends GetView<WelcomeCtrl> {
           ),
           MyTextH3("欢迎使用 ${controller.project} 的 ${controller.app} APP", colorPrimaryContainer),
           MyTextP3(controller.title, colorPrimaryContainer),
+          ElevatedButton(
+            child: Text("设备连接"),
+            onPressed: ()=>Get.to(BluetoothAdmin()),
+          ),
         ],
       ),
     );
@@ -51,28 +54,8 @@ class WelcomeView extends GetView<WelcomeCtrl> {
 
 class WelcomeCtrl extends GetxController {
   String project = "HealingAI";
-  String app = "Brain View";
-  String title = "基于 BCI & HRV 的生命体征洞察工具箱";
+  String app = "BrainView";
+  String title = "基于 BCI 的生命体征洞察工具箱";
 }
 
-class FaceView extends GetView<WelcomeCtrl> {
-  @override
-  final controller = Get.put(WelcomeCtrl());
 
-  FaceView({super.key});
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: colorPrimary,
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          MyTextH3("Welcome to ${controller.project}", colorPrimaryContainer),
-        ],
-      ),
-    );
-  }
-}

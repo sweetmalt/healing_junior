@@ -8,8 +8,8 @@ import 'package:healing_junior/apps/brain_load.dart';
 import 'package:healing_junior/apps/customer.dart';
 import 'package:healing_junior/apps/draw.dart';
 import 'package:healing_junior/apps/employee.dart';
-import 'package:healing_junior/apps/heart_rate.dart';
-import 'package:healing_junior/apps/hrv.dart';
+// import 'package:healing_junior/apps/heart_rate.dart';
+// import 'package:healing_junior/apps/hrv.dart';
 import 'package:healing_junior/apps/institution.dart';
 import 'package:healing_junior/apps/pdf.dart';
 import 'package:healing_junior/apps/pressure.dart';
@@ -55,7 +55,6 @@ class MyView extends GetView<MyCtrl> {
           elevation: 1,
           toolbarHeight: 64,
           leadingWidth: 64,
-
           title: Obx(() => MyTextH2(
               "${welcomeCtrl.app} ${customerCtrl.isRecording.value ? '检测中……' : ''}${customerCtrl.isRecording.value ? controller.pureCount.value : ''}")),
           actions: [
@@ -268,17 +267,14 @@ class MyView extends GetView<MyCtrl> {
                 child: RepaintBoundary(
                   key: controller.expansionKeys[8],
                   child: ExpansionTile(
-                    leading: Icon(Icons.monitor_heart_rounded),
+                    leading: Icon(Icons.games_rounded),
                     collapsedShape: Border(top: BorderSide(color: colorSurface)),
                     shape: Border(top: BorderSide(color: colorSurface)),
-                    title: MyTextP1("心率 & HRV"),
-                    subtitle: MyTextP3("心率与心率变异性的的动态变化", colorPrimaryContainer),
+                    title: MyTextP1("疗愈实验室"),
+                    subtitle: MyTextP3("探索情绪跟踪如何与各种疗愈服务场景相结合", colorPrimaryContainer),
                     children: [
-                      HeartRateView(),
-                      const SizedBox(height: 20),
-                      Divider(height: 1),
-                      const SizedBox(height: 20),
-                      HrvView(),
+                      const Text("( 开发中……，可在设置页面关闭显示该模块 )"),
+                      const SizedBox(height: 100),
                     ],
                   ),
                 ),
@@ -310,7 +306,7 @@ class MyView extends GetView<MyCtrl> {
                     collapsedShape: Border(top: BorderSide(color: colorSurface)),
                     shape: Border(top: BorderSide(color: colorSurface)),
                     title: MyTextP1("大脑负载"),
-                    subtitle: MyTextP3("整个检测过程中脑波能耗的末段均值与历史最高值之比", colorPrimaryContainer),
+                    subtitle: MyTextP3("整个检测过程中脑波能耗的当下均值与历史最高值之比", colorPrimaryContainer),
                     children: [
                       BrainLoadView(),
                     ],
@@ -327,7 +323,7 @@ class MyView extends GetView<MyCtrl> {
                     collapsedShape: Border(top: BorderSide(color: colorSurface)),
                     shape: Border(top: BorderSide(color: colorSurface)),
                     title: MyTextP1("压力指数"),
-                    subtitle: MyTextP3("基于脑波活跃度的心理压力 & 基于LF/HF的心脏压力", colorPrimaryContainer),
+                    subtitle: MyTextP3("基于脑波活跃度的心理压力评估", colorPrimaryContainer),
                     children: [
                       PressureView(),
                     ],

@@ -226,42 +226,7 @@ class ReaaltimeView extends GetView<BaselineCtrl> {
                 mainAxisSpacing: 20,
                 crossAxisSpacing: 20,
                 children: [
-                  Card(
-                    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      Icon(Icons.access_time),
-                      Text("心率"),
-                      BarChart(
-                        0.5,
-                        controller.heartRate.value > 0 ? controller.heartRateRealtime.value / controller.heartRate.value * 0.5 : 0.5,
-                        colorSurface,
-                      ),
-                      Text("${controller.heartRate.value} 基线 | 当前 ${controller.heartRateRealtime.value}"),
-                    ]),
-                  ),
-                  Card(
-                    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      Icon(Icons.access_time),
-                      Text("HRV"),
-                      BarChart(
-                        0.5,
-                        controller.hrv.value > 0 ? controller.hrvRealtime.value / controller.hrv.value * 0.5 : 0.5,
-                        colorSurface,
-                      ),
-                      Text("${controller.hrv.value} 基线 | 当前 ${controller.hrvRealtime.value}"),
-                    ]),
-                  ),
-                  Card(
-                    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      Icon(Icons.access_time),
-                      Text("额温"),
-                      BarChart(
-                        0.5,
-                        controller.temperature.value > 0 ? controller.temperatureRealtime.value / controller.temperature.value * 0.5 : 0.5,
-                        colorSurface,
-                      ),
-                      Text("${controller.temperature.value} 基线 | 当前 ${controller.temperatureRealtime.value}"),
-                    ]),
-                  ),
+                  
                   Card(
                     child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                       Icon(Icons.access_time),
@@ -342,44 +307,17 @@ class BaselineView extends GetView<BaselineCtrl> {
       padding: EdgeInsets.all(10),
       child: Obx(() => Column(
             children: [
-              MyTextP1("( 心&脑 - 基线数据 )"),
+              MyTextP1("( 基线数据 )"),
               const SizedBox(height: 20),
               MyTextP2(controller.isLoaded.value ? "- 已加载，图中均为真实数据 -" : "- 待加载，图中暂为模拟数据 -"),
               const SizedBox(height: 20),
               GridView.count(
-                crossAxisCount: 4,
+                crossAxisCount: 3,
                 physics: NeverScrollableScrollPhysics(),
                 shrinkWrap: true,
                 mainAxisSpacing: 20,
                 crossAxisSpacing: 20,
                 children: [
-                  Card(
-                      child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.access_time),
-                      Text("心率"),
-                      MyTextH2("${controller.heartRate.value}"),
-                    ],
-                  )),
-                  Card(
-                      child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.access_time),
-                      Text("HRV"),
-                      MyTextH2("${controller.hrv.value}"),
-                    ],
-                  )),
-                  Card(
-                      child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.access_time),
-                      Text("额温"),
-                      MyTextH2("${controller.temperature.value}"),
-                    ],
-                  )),
                   Card(
                       child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -448,9 +386,7 @@ class BaselineView extends GetView<BaselineCtrl> {
 // };
 
 class BaselineCtrl extends GetxController {
-  RxInt heartRate = 72.obs;
-  RxInt hrv = 800.obs;
-  RxDouble temperature = 35.5.obs;
+
   RxInt delta = 16000.obs;
   RxInt theta = 8000.obs;
   RxInt alpha = 3000.obs;
@@ -459,9 +395,7 @@ class BaselineCtrl extends GetxController {
 
   RxBool isLoaded = false.obs;
 
-  RxInt heartRateRealtime = 72.obs;
-  RxInt hrvRealtime = 800.obs;
-  RxDouble temperatureRealtime = 35.5.obs;
+
   RxInt deltaRealtime = 16000.obs;
   RxInt thetaRealtime = 8000.obs;
   RxInt alphaRealtime = 3000.obs;
@@ -502,9 +436,7 @@ class BaselineCtrl extends GetxController {
   }
 
   void init() {
-    heartRate.value = 72;
-    hrv.value = 800;
-    temperature.value = 35.5;
+
     delta.value = 16000;
     theta.value = 8000;
     alpha.value = 3000;
@@ -513,9 +445,7 @@ class BaselineCtrl extends GetxController {
 
     isLoaded.value = false;
 
-    heartRateRealtime.value = 72;
-    hrvRealtime.value = 800;
-    temperatureRealtime.value = 35.5;
+
     deltaRealtime.value = 16000;
     thetaRealtime.value = 8000;
     alphaRealtime.value = 3000;

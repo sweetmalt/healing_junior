@@ -99,7 +99,7 @@ class SettingView extends GetView<SettingCtrl> {
                 ),
                 Divider(height: 1, color: colorSecondary),
                 SwitchListTile(
-                  title: const Text("心率 & HRV"),
+                  title: const Text("疗愈实验室"),
                   value: controller.states[8],
                   onChanged: (value) async {
                     controller.updateState(8, value);

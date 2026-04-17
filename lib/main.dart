@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:healing_junior/index.dart';
+import 'package:healing_junior/services/bluetooth.dart';
 import 'package:healing_junior/view.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  //WidgetsFlutterBinding.ensureInitialized();
   runApp(MyApp());
 }
 
@@ -32,6 +33,7 @@ class MyApp extends StatelessWidget {
           bodyMedium: TextStyle(color: Colors.blueGrey),
         ),
       ),
+      initialBinding: AppBinding(),
       home: IndexView(),
     );
   }

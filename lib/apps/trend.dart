@@ -177,7 +177,9 @@ class EmoValue extends StatelessWidget {
         dataTemp.add(data[i]);
       }
     }
-    final total = dataTemp.reduce((prev, cur) => prev + cur);
+    final total = data.reduce((prev, cur) => prev + cur);
+    final totalBirds = dataTemp.reduce((prev, cur) => prev + cur);
+    final totalCribs = total - totalBirds;
     return Container(
       margin: EdgeInsets.all(10),
       padding: EdgeInsets.all(10),
@@ -217,7 +219,6 @@ class EmoValue extends StatelessWidget {
           ),
           const SizedBox(height: 40),
           const Divider(height: 20, thickness: 5, radius: BorderRadius.all(Radius.circular(5))),
-          MyTextP2("正向情绪的动态捕获"),
           MyTextP2("（疗愈收益）"),
           const Divider(height: 20),
           Table(
@@ -251,7 +252,8 @@ class EmoValue extends StatelessWidget {
             ],
           ),
           const Divider(height: 20),
-          MyTextP2("Total Birds $total"),
+          MyTextP2("Total Birds $totalBirds + Total Cribs $totalCribs"),
+          MyTextP2("收获的正向情绪 & 被克制的负向情绪"),
         ],
       ),
     );
