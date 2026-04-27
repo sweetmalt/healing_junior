@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:healing_junior/apps/bagua.dart';
 import 'package:healing_junior/index.dart';
 import 'package:healing_junior/view.dart';
 
@@ -28,6 +29,11 @@ class FaceView extends GetView<FaceCtrl> {
             ElevatedButton(
               child: Text("脑电检测"),
               onPressed: () => indexCtrl.updateIndex(1),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              child: Text("卡牌疗愈"),
+              onPressed: () => Get.to(() => BaguaView()),
             ),
           ],
         ),

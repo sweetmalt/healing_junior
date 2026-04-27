@@ -30,7 +30,7 @@ Color colorSecondary = Colors.white;
 Color colorSecondaryContainer = Colors.black;
 Color colorError = Colors.purple;
 List<Color> colors5 = [
-  Color.fromARGB(255, 255, 200, 0),
+  const Color.fromARGB(255, 255, 200, 0),
   Colors.green,
   Colors.blue,
   Colors.deepPurpleAccent,
@@ -44,6 +44,7 @@ class MyView extends GetView<MyCtrl> {
   final welcomeCtrl = Get.put(WelcomeCtrl());
   final customerCtrl = Get.put(CustomerCtrl());
   final wavesCtrl = Get.put(WavesCtrl());
+  final trendCrl = Get.put(TrendCtrl());
 
   @override
   final MyCtrl controller = Get.put(MyCtrl());
@@ -342,6 +343,7 @@ class MyView extends GetView<MyCtrl> {
                     title: MyTextP1("情绪跟踪"),
                     subtitle: MyTextP3("基于脑波变化趋势相干性的情绪发现与计数", colorPrimaryContainer),
                     children: [
+                      Obx(() => MyTextP2("当下情绪：${trendCrl.beEmo.value}")),
                       TrendView(),
                     ],
                   ),

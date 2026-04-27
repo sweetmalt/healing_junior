@@ -161,9 +161,8 @@ class CustomerView extends GetView<CustomerCtrl> {
                 ),
               const SizedBox(height: 20),
               controller.isLoaded.value
-                  ? CircularIconTextButton(
-                      text: "开始检测",
-                      icon: Icons.insights_rounded,
+                  ? ElevatedButton(
+                      child: Text("开始检测 / 重新开始检测"),
                       onPressed: () {
                         if (controller.isRecording.value) {
                           Get.defaultDialog(
@@ -185,7 +184,7 @@ class CustomerView extends GetView<CustomerCtrl> {
                       })
                   : Text("请先搜索并添加当前预定服务的顾客"),
               const SizedBox(height: 20),
-              if (controller.isRecording.value) MyTextH3("检测中……${myCtrl.pureCount.value}，可点击按钮重新开始检测", Colors.red),
+              if (controller.isRecording.value) MyTextH3("检测中……${myCtrl.pureCount.value}", Colors.red),
               if (controller.isRecording.value) CircularProgressIndicator(),
               if (controller.isRecording.value)
                 ElevatedButton(
@@ -202,9 +201,10 @@ class CustomerView extends GetView<CustomerCtrl> {
                     onCancel: () => Get.back(),
                   ),
                 ),
+              if (controller.isNewSample.value) MyTextH3("存在未保存的检测数据！", Colors.red),
               if (controller.isNewSample.value)
                 ElevatedButton(
-                  child: Text("保存检测"),
+                  child: Text("保存数据"),
                   onPressed: () => Get.defaultDialog(
                     title: "提示",
                     middleText: "确认保存本次检测数据？",

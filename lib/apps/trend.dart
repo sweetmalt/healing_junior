@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:healing_junior/view.dart';
 
+List<String> emoLabels = ["恐惧-", "紧绷-", "警觉+", "欢喜+", "焦虑-", "紧张-", "兴奋+", "快乐+", "厌恶-", "烦恼-", "镇定+", "放松+", "抑郁-", "悲伤-", "平静+", "满足+"];
+
 class TrendView extends GetView<TrendCtrl> {
   TrendView({super.key});
   @override
@@ -11,46 +13,32 @@ class TrendView extends GetView<TrendCtrl> {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 10),
-      child: Obx(() => EmoValue(data: [
-            controller.emoV1.value,
-            controller.emoV2.value,
-            controller.emoV3.value,
-            controller.emoV4.value,
-            controller.emoV5.value,
-            controller.emoV6.value,
-            controller.emoV7.value,
-            controller.emoV8.value,
-            controller.emoV9.value,
-            controller.emoV10.value,
-            controller.emoV11.value,
-            controller.emoV12.value,
-            controller.emoV13.value,
-            controller.emoV14.value,
-            controller.emoV15.value,
-            controller.emoV16.value
-          ])),
+      child: Obx(() => EmoValue(data: controller.emoValues.toList())),
     );
   }
 }
 
 class TrendCtrl extends GetxController {
-  final RxInt emoV1 = 0.obs; //恐惧-
-  final RxInt emoV2 = 0.obs; //紧绷-
-  final RxInt emoV3 = 0.obs; //警觉+
-  final RxInt emoV4 = 0.obs; //欢喜+
-  final RxInt emoV5 = 0.obs; //焦虑-
-  final RxInt emoV6 = 0.obs; //紧张-
-  final RxInt emoV7 = 0.obs; //兴奋+
-  final RxInt emoV8 = 0.obs; //快乐+
-  final RxInt emoV9 = 0.obs; //厌恶-
-  final RxInt emoV10 = 0.obs; //烦恼-
-  final RxInt emoV11 = 0.obs; //镇定+
-  final RxInt emoV12 = 0.obs; //放松+
-  final RxInt emoV13 = 0.obs; //抑郁-
-  final RxInt emoV14 = 0.obs; //悲伤-
-  final RxInt emoV15 = 0.obs; //平静+
-  final RxInt emoV16 = 0.obs; //满足+
-  void trend(double deltaTrendSign, double thetaTrendSign, double alphaTrendSign, double betaTrendSign, double gammaTrendSign) {
+  final RxList<int> emoValues = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0].obs;
+  final beEmo="".obs;
+  // final RxInt emoV1 = 0.obs; //恐惧-
+  // final RxInt emoV2 = 0.obs; //紧绷-
+  // final RxInt emoV3 = 0.obs; //警觉+
+  // final RxInt emoV4 = 0.obs; //欢喜+
+  // final RxInt emoV5 = 0.obs; //焦虑-
+  // final RxInt emoV6 = 0.obs; //紧张-
+  // final RxInt emoV7 = 0.obs; //兴奋+
+  // final RxInt emoV8 = 0.obs; //快乐+
+  // final RxInt emoV9 = 0.obs; //厌恶-
+  // final RxInt emoV10 = 0.obs; //烦恼-
+  // final RxInt emoV11 = 0.obs; //镇定+
+  // final RxInt emoV12 = 0.obs; //放松+
+  // final RxInt emoV13 = 0.obs; //抑郁-
+  // final RxInt emoV14 = 0.obs; //悲伤-
+  // final RxInt emoV15 = 0.obs; //平静+
+  // final RxInt emoV16 = 0.obs; //满足+
+  List<String> trend(double deltaTrendSign, double thetaTrendSign, double alphaTrendSign, double betaTrendSign, double gammaTrendSign) {
+    List<String> trendEmos = [];
     if (betaTrendSign < 0) {
       //正向情绪
       if (alphaTrendSign > 0) {
@@ -59,19 +47,27 @@ class TrendCtrl extends GetxController {
           //上层左侧正向情绪
           if (thetaTrendSign < 0) {
             //上层左侧外向正向情绪
-            emoV3.value++;
+            //emoV3.value++;
+            emoValues[2]++;
+            trendEmos.add("${emoLabels[2]}1");
           } else {
             //上层左侧内向正向情绪
-            emoV7.value++;
+            //emoV7.value++;
+            emoValues[6]++;
+            trendEmos.add("${emoLabels[6]}1");
           }
         } else {
           //上层右侧正向情绪
           if (thetaTrendSign < 0) {
             //上层右侧外向正向情绪
-            emoV4.value++;
+            //emoV4.value++;
+            emoValues[3]++;
+            trendEmos.add("${emoLabels[3]}1");
           } else {
             //上层右侧内向正向情绪
-            emoV8.value++;
+            //emoV8.value++;
+            emoValues[7]++;
+            trendEmos.add("${emoLabels[7]}1");
           }
         }
       } else {
@@ -80,19 +76,27 @@ class TrendCtrl extends GetxController {
           //下层左侧正向情绪
           if (thetaTrendSign < 0) {
             //下层左侧外向正向情绪
-            emoV11.value++;
+            //emoV11.value++;
+            emoValues[10]++;
+            trendEmos.add("${emoLabels[10]}1");
           } else {
             //下层左侧内向正向情绪
-            emoV15.value++;
+            //emoV15.value++;
+            emoValues[14]++;
+            trendEmos.add("${emoLabels[14]}1");
           }
         } else {
           //下层右侧正向情绪
           if (thetaTrendSign < 0) {
             //下层右侧外向正向情绪
-            emoV12.value++;
+            //emoV12.value++;
+            emoValues[11]++;
+            trendEmos.add("${emoLabels[11]}1");
           } else {
             //下层右侧内向正向情绪
-            emoV16.value++;
+            //emoV16.value++;
+            emoValues[15]++;
+            trendEmos.add("${emoLabels[15]}1");
           }
         }
       }
@@ -104,19 +108,27 @@ class TrendCtrl extends GetxController {
           //上层左侧负向情绪
           if (thetaTrendSign < 0) {
             //上层左侧外向负向情绪
-            emoV1.value++;
+            //emoV1.value++;
+            emoValues[0]++;
+            trendEmos.add("${emoLabels[0]}1");
           } else {
             //上层左侧内向负向情绪
-            emoV5.value++;
+            //emoV5.value++;
+            emoValues[4]++;
+            trendEmos.add("${emoLabels[4]}1");
           }
         } else {
           //上层右侧负向情绪
           if (thetaTrendSign < 0) {
             //上层右侧外向负向情绪
-            emoV2.value++;
+            //emoV2.value++;
+            emoValues[1]++;
+            trendEmos.add("${emoLabels[1]}1");
           } else {
             //上层右侧内向负向情绪
-            emoV6.value++;
+            //emoV6.value++;
+            emoValues[5]++;
+            trendEmos.add("${emoLabels[5]}1");
           }
         }
       } else {
@@ -125,42 +137,55 @@ class TrendCtrl extends GetxController {
           //下层左侧负向情绪
           if (thetaTrendSign < 0) {
             //下层左侧外向负向情绪
-            emoV9.value++;
+            //emoV9.value++;
+            emoValues[8]++;
+            trendEmos.add("${emoLabels[8]}1");
           } else {
             //下层左侧内向负向情绪
-            emoV13.value++;
+            //emoV13.value++;
+            emoValues[12]++;
+            trendEmos.add("${emoLabels[12]}1");
           }
         } else {
           //下层右侧负向情绪
           if (thetaTrendSign < 0) {
             //下层右侧外向负向情绪
-            emoV10.value++;
+            //emoV10.value++;
+            emoValues[9]++;
+            trendEmos.add("${emoLabels[9]}1");
           } else {
             //下层右侧内向负向情绪
-            emoV14.value++;
+            //emoV14.value++;
+            emoValues[13]++;
+            trendEmos.add("${emoLabels[13]}1");
           }
         }
       }
     }
+    beEmo.value=trendEmos.join(",");
+    return trendEmos;
   }
 
   void init() {
-    emoV1.value = 0;
-    emoV2.value = 0;
-    emoV3.value = 0;
-    emoV4.value = 0;
-    emoV5.value = 0;
-    emoV6.value = 0;
-    emoV7.value = 0;
-    emoV8.value = 0;
-    emoV9.value = 0;
-    emoV10.value = 0;
-    emoV11.value = 0;
-    emoV12.value = 0;
-    emoV13.value = 0;
-    emoV14.value = 0;
-    emoV15.value = 0;
-    emoV16.value = 0;
+    for (int i = 0; i < emoValues.length; i++) {
+      emoValues[i] = 0;
+    }
+    // emoV1.value = 0;
+    // emoV2.value = 0;
+    // emoV3.value = 0;
+    // emoV4.value = 0;
+    // emoV5.value = 0;
+    // emoV6.value = 0;
+    // emoV7.value = 0;
+    // emoV8.value = 0;
+    // emoV9.value = 0;
+    // emoV10.value = 0;
+    // emoV11.value = 0;
+    // emoV12.value = 0;
+    // emoV13.value = 0;
+    // emoV14.value = 0;
+    // emoV15.value = 0;
+    // emoV16.value = 0;
   }
 }
 
@@ -169,7 +194,6 @@ class EmoValue extends StatelessWidget {
   const EmoValue({super.key, required this.data});
   @override
   Widget build(BuildContext context) {
-    const labels = ["恐惧-", "紧绷-", "警觉+", "欢喜+", "焦虑-", "紧张-", "兴奋+", "快乐+", "厌恶-", "烦恼-", "镇定+", "放松+", "抑郁-", "悲伤-", "平静+", "满足+"];
     const indexs = [2, 3, 6, 7, 10, 11, 14, 15];
     List<int> dataTemp = [];
     for (int i = 0; i < data.length; i++) {
@@ -205,16 +229,11 @@ class EmoValue extends StatelessWidget {
                       for (int j = 0; j < 4; j++)
                         Container(
                           alignment: Alignment.center,
-                          child: MyTextP3(labels[i * 4 + j], colorPrimaryContainer),
+                          child: MyTextP3(emoLabels[i * 4 + j], colorPrimaryContainer),
                         ),
                     ])
                 ],
               ),
-              // Image.asset(
-              //   width: 40 + (total < 160 ? total : 160).toDouble(),
-              //   height: 40 + (total < 160 ? total : 160).toDouble(),
-              //   'assets/images/Bird.png',
-              // ),
             ],
           ),
           const SizedBox(height: 40),
@@ -229,9 +248,9 @@ class EmoValue extends StatelessWidget {
             },
             defaultVerticalAlignment: TableCellVerticalAlignment.middle,
             children: [
-              for (int i = 0; i < labels.length; i++)
+              for (int i = 0; i < emoLabels.length; i++)
                 TableRow(children: [
-                  MyTextP2(labels[i]),
+                  MyTextP2(emoLabels[i]),
                   Row(
                     children: [
                       for (int j = 0; j < (data[i] > 16 ? 16 : data[i]); j++)

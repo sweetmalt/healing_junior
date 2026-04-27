@@ -95,6 +95,15 @@ Yao tossCoins() {
   return Yao(yang: true, number: 7, changed: false);
 }
 
+// 根据铜钱数字列表计算爻（三枚铜钱显示2或3）
+Yao calcYaoFromCoins(List<String> coins) {
+  int n = coins.where((c) => c == '3').length; // 正面数量
+  if (n == 3) return Yao(yang: true, number: 9, changed: true);
+  if (n == 0) return Yao(yang: false, number: 6, changed: true);
+  if (n == 2) return Yao(yang: false, number: 8, changed: false);
+  return Yao(yang: true, number: 7, changed: false);
+}
+
 List<Yao> tossHexagram() => List.generate(6, (_) => tossCoins());
 
 int? yaoListToHexNumber(List<Yao> yaoList) {
@@ -119,18 +128,40 @@ class BaguaCtrl extends GetxController {
   final currentHexData = Rxn<Map<String, dynamic>>();
   final currentNarrative = Rxn<Map<String, dynamic>>();
   final cardImageUrl = ''.obs;
-  // 铜钱数字显示（最简单的方式）
+  // 铜钱数字显示（3=正面, 2=背面），三枚之和决定6/7/8/9
   final coinNums = <String>['3', '2', '3'].obs;
+  // 动画取消标记
+  bool _disposed = false;
+  // 快速翻转定时器
+  Timer? _coinFlipTimer;
 
-  void startCoinAnim(bool yang) {
-    // 生成随机数字
-    final rnd = math.Random();
-    coinNums.value = [rnd.nextBool() ? '3' : '2', rnd.nextBool() ? '3' : '2', rnd.nextBool() ? '3' : '2'];
+  @override
+  void onClose() {
+    _disposed = true;
+    _coinFlipTimer?.cancel();
+    super.onClose();
   }
 
-  void stopCoinAnim(bool yang) {
-    final num = yang ? '3' : '2';
-    coinNums.value = [num, num, num];
+  void startCoinAnim() {
+    _coinFlipTimer?.cancel();
+    // 快速切换铜钱数字，模拟抛掷效果
+    _coinFlipTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
+      if (_disposed) {
+        timer.cancel();
+        return;
+      }
+      final rnd = math.Random();
+      coinNums.value = [
+        rnd.nextBool() ? '3' : '2',
+        rnd.nextBool() ? '3' : '2',
+        rnd.nextBool() ? '3' : '2',
+      ];
+    });
+  }
+
+  void stopCoinAnim() {
+    _coinFlipTimer?.cancel();
+    _coinFlipTimer = null;
   }
 
   @override
@@ -190,21 +221,27 @@ class BaguaCtrl extends GetxController {
   }
 
   void _performToss() {
+    if (_disposed) return;
     if (tossCount.value >= 6) {
-      stopCoinAnim(false);
       _showResult();
       return;
     }
-    // 生成爻
-    final toss = tossCoins();
-    yaoList.add(toss);
-    tossCount.value++;
-    // 开始铜钱动画（只设置一次随机数）
-    startCoinAnim(toss.yang);
-    // 3秒后继续下一爻
+    // 开始铜钱快速翻转动画
+    startCoinAnim();
+    // 3秒后停止动画，显示最终结果
     Future.delayed(const Duration(seconds: 3), () {
-      stopCoinAnim(toss.yang);
-      Future.delayed(const Duration(milliseconds: 500), _performToss);
+      if (_disposed) return;
+      stopCoinAnim(); // 保持最终随机结果
+      // 再停顿1秒，让用户看清铜钱结果
+      Future.delayed(const Duration(seconds: 1), () {
+        if (_disposed) return;
+        // 根据三枚铜钱计算爻并添加到列表
+        final toss = calcYaoFromCoins(coinNums.toList());
+        yaoList.add(toss);
+        tossCount.value++;
+        // 短暂停顿后进入下一爻
+        Future.delayed(const Duration(milliseconds: 300), _performToss);
+      });
     });
   }
 
@@ -259,10 +296,11 @@ class BaguaCtrl extends GetxController {
       if (idData['id'] != null) pkgId = idData['id'] as int;
     } catch (_) {}
     final pkgPath = await Data.path('card_package_$pkgId');
-    debugPrint('loadCardPackage: path=$pkgPath, exists=${await File(pkgPath).exists()}');
-    if (await File(pkgPath).exists()) {
+    final pkgFile = File(pkgPath);
+    debugPrint('loadCardPackage: path=$pkgPath, exists=${await pkgFile.exists()}');
+    if (await pkgFile.exists()) {
       try {
-        final contents = await File(pkgPath).readAsString();
+        final contents = await pkgFile.readAsString();
         final pkg = jsonDecode(contents) as Map<String, dynamic>;
         debugPrint('loadCardPackage: cards count=${(pkg['cards'] as Map?)?.length}');
         initCardPackage(pkg);
@@ -669,24 +707,24 @@ class BaguaView extends GetView<BaguaCtrl> {
           }),
           // 视觉叙事-主内容
           if (narr != null && narr['visual_narrative'] != null && (narr['visual_narrative']['primary'] ?? '').isNotEmpty) ...[
-            _buildSection('.', narr['visual_narrative']['primary'] ?? '', const Color(0xFFD4AF37), fontSize: 14),
+            _buildSection('.', narr['visual_narrative']['primary'] ?? '', const Color(0xFFD4AF37), fontSize: 20),
             const SizedBox(height: 12),
           ],
           // 视觉叙事-描述
           if (narr != null && narr['visual_narrative'] != null && (narr['visual_narrative']['primary_description'] ?? '').isNotEmpty) ...[
-            _buildSection('内容', narr['visual_narrative']['primary_description'] ?? '', const Color(0xFFAAAAAA), fontSize: 14),
+            _buildSection('内容', narr['visual_narrative']['primary_description'] ?? '', const Color(0xFFAAAAAA), fontSize: 20),
             const SizedBox(height: 12),
           ],
           // 视觉叙事-启发
           if (narr != null && narr['visual_narrative'] != null) ...[
-            _buildSection('启发', narr['visual_narrative']['启发点'] ?? '', const Color(0xFF6EC6FF), fontSize: 14),
+            _buildSection('启发', narr['visual_narrative']['启发点'] ?? '', const Color(0xFF6EC6FF), fontSize: 20),
             const SizedBox(height: 12),
           ],
           // 卦辞
-          _buildSection('卦辞', hex['gua_text'] ?? '', Colors.white, fontSize: 14),
+          _buildSection('卦辞', hex['gua_text'] ?? '', Colors.white, fontSize: 20),
           const SizedBox(height: 12),
           // 爻辞
-          const Text('爻辞', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 14, fontWeight: FontWeight.bold)),
+          const Text('爻辞', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 6),
           ...yaoItems.map((y) => Padding(
                 padding: const EdgeInsets.only(bottom: 6),
@@ -696,24 +734,24 @@ class BaguaView extends GetView<BaguaCtrl> {
                     SizedBox(
                       width: 36,
                       child: Text('${y['symbol']} ${y['position']}',
-                          style: TextStyle(color: y['yang'] ? const Color(0xFFFF8844) : const Color(0xFF66BBAA), fontSize: 12)),
+                          style: TextStyle(color: y['yang'] ? const Color(0xFFFF8844) : const Color(0xFF66BBAA), fontSize: 20)),
                     ),
-                    Expanded(child: Text('${y['text']}', style: const TextStyle(color: Color(0xFFDDDDDD), fontSize: 13, height: 1.4))),
+                    Expanded(child: Text('${y['text']}', style: const TextStyle(color: Color(0xFFDDDDDD), fontSize: 20, height: 1.4))),
                   ],
                 ),
               )),
           const SizedBox(height: 8),
           // 象曰
-          if (hex['xiang'] != null) _buildSection('象曰', hex['xiang'], const Color(0xFFAAAAAA), fontSize: 12),
+          if (hex['xiang'] != null) _buildSection('象曰', hex['xiang'], const Color(0xFFAAAAAA), fontSize: 20),
           const SizedBox(height: 8),
           // 彖曰
-          if (hex['tuan'] != null) _buildSection('彖曰', hex['tuan'], const Color(0xFFBBBBBB), fontSize: 12),
+          if (hex['tuan'] != null) _buildSection('彖曰', hex['tuan'], const Color(0xFFBBBBBB), fontSize: 20),
         ],
       ),
     );
   }
 
-  Widget _buildSection(String title, String content, Color titleColor, {double fontSize = 14}) {
+  Widget _buildSection(String title, String content, Color titleColor, {double fontSize = 20}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1252,7 +1290,7 @@ class BaguaHexTextView extends GetView<BaguaHexTextCtrl> {
                               width: 40,
                               height: 40,
                               decoration: BoxDecoration(
-                                color: const Color(0xFFD4AF37).withOpacity(0.2),
+                                color: const Color(0xFFD4AF37).withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               alignment: Alignment.center,
@@ -1546,7 +1584,7 @@ class BaguaNarrativeView extends GetView<BaguaNarrativeCtrl> {
                           width: 40,
                           height: 40,
                           decoration: BoxDecoration(
-                            color: const Color(0xFFD4AF37).withOpacity(0.2),
+                            color: const Color(0xFFD4AF37).withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           alignment: Alignment.center,
@@ -1616,7 +1654,7 @@ class BaguaNarrativeView extends GetView<BaguaNarrativeCtrl> {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: const Color(0xFF1A1A2E).withOpacity(0.5),
+            color: const Color(0xFF1A1A2E).withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: const Color(0xFF3A3A5A)),
           ),
@@ -1644,9 +1682,9 @@ class BaguaNarrativeView extends GetView<BaguaNarrativeCtrl> {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: const Color(0xFFD4AF37).withOpacity(0.1),
+            color: const Color(0xFFD4AF37).withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.3)),
+            border: Border.all(color: const Color(0xFFD4AF37).withValues(alpha: 0.3)),
           ),
           child: Text(content, style: const TextStyle(color: Color(0xFFD4AF37), fontSize: 13, height: 1.6)),
         ),
