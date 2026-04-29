@@ -160,6 +160,7 @@ class SettingView extends GetView<SettingCtrl> {
                     await controller.save();
                   },
                 ),
+                const SizedBox(height:40),
               ],
             )),
       ),

@@ -111,9 +111,9 @@ int? yaoListToHexNumber(List<Yao> yaoList) {
   return _hexSymbolToNumber[s];
 }
 
-List<Yao> calculateHuGua(List<Yao> ben) => [ben[1], ben[2], ben[3], ben[3], ben[4], ben[2]];
+List<Yao> calculateHuGua(List<Yao> ben) => [ben[1], ben[2], ben[3], ben[2], ben[3], ben[4]];
 List<Yao> calculateCuoGua(List<Yao> ben) => ben.map((y) => Yao(yang: !y.yang, number: y.number, changed: false)).toList();
-List<Yao> calculateZongGua(List<Yao> ben) => [ben[5], ben[4], ben[3], ben[2], ben[1], ben[0]];
+List<Yao> calculateZongGua(List<Yao> ben) => [ben[3], ben[4], ben[5], ben[0], ben[1], ben[2]];
 List<Yao> calculateBianGua(List<Yao> ben) => ben.map((y) => y.changed ? Yao(yang: !y.yang, number: y.number, changed: true) : y).toList();
 
 class BaguaCtrl extends GetxController {

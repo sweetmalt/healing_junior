@@ -11,6 +11,7 @@ import 'package:healing_junior/apps/brain_load.dart';
 import 'package:healing_junior/apps/customer.dart';
 import 'package:healing_junior/apps/draw.dart';
 import 'package:healing_junior/apps/pressure.dart';
+import 'package:healing_junior/apps/qing_zhi.dart';
 import 'package:healing_junior/apps/resting.dart';
 import 'package:healing_junior/apps/setting.dart';
 import 'package:healing_junior/apps/staff.dart';
@@ -138,6 +139,7 @@ class MyCtrl extends GetxController {
   final brainLoadCtrl = Get.put(BrainLoadCtrl());
   final drawCtrl = Get.put(DrawCtrl());
   final trendCtrl = Get.put(TrendCtrl());
+  final qingzhiCtrl = Get.put(QingZhiCtrl());
   final pressureCtrl = Get.put(PressureCtrl());
 
   @override
@@ -222,7 +224,7 @@ class MyCtrl extends GetxController {
     double alpha = eegDatas[4];
     double beta = eegDatas[5];
     double gamma = eegDatas[6];
-//显示实时脑波数据
+    //显示实时脑波数据
     wavesCtrl.addSpots([
       delta,
       theta,
@@ -281,7 +283,6 @@ class MyCtrl extends GetxController {
       // heartRateCtrl.heartRate.value = heartRate.toInt();
       restingCtrl.rate.value = comeCount.value > 0 ? pureCount.value / comeCount.value : 1;
       brainLoadCtrl.topLoad.value = brainLoadCtrl.topLoad.value < bciTotal ? bciTotal : brainLoadCtrl.topLoad.value;
-      
 
       ///计算基线数据以及基于基线的动态数据
       if (bciDataDelta.length == 16) {
@@ -317,10 +318,20 @@ class MyCtrl extends GetxController {
         double betaTrendSign = betaTrend["sign"];
         double gammaTrendSign = gammaTrend["sign"];
         trendCtrl.trend(deltaTrendSign, thetaTrendSign, alphaTrendSign, betaTrendSign, gammaTrendSign);
+        
+        qingzhiCtrl.updateEmoValues([
+          trendCtrl.emoValues[3], //喜
+          trendCtrl.emoValues[1], //怒
+          trendCtrl.emoValues[9], //忧
+          trendCtrl.emoValues[4], //思
+          trendCtrl.emoValues[13], //悲
+          trendCtrl.emoValues[0], //恐
+          trendCtrl.emoValues[5], //惊
+        ]);
         wuluohaiCtrl.selectRandom();
         staffCtrl.refreshNotes();
         pressureCtrl.psyPresssure.value = betaTrend["activity"] / (alphaTrend["activity"] + betaTrend["activity"]);
-        brainLoadCtrl.load.value = deltaTrend["mv"]+ thetaTrend["mv"]+ alphaTrend["mv"]+ betaTrend["mv"]+ gammaTrend["mv"];
+        brainLoadCtrl.load.value = deltaTrend["mv"] + thetaTrend["mv"] + alphaTrend["mv"] + betaTrend["mv"] + gammaTrend["mv"];
       }
 
       ///BCI检测完毕
@@ -364,6 +375,7 @@ class MyCtrl extends GetxController {
           "timestamp": DateTime.now().millisecondsSinceEpoch,
         });
         //}
+        qingzhiCtrl.createCozePrompt("检测时长约${customerCtrl.sampleSize.value % 60 + 1}分钟");
       }
     }
   }
@@ -387,6 +399,7 @@ class MyCtrl extends GetxController {
     brainLoadCtrl.init();
     drawCtrl.init();
     trendCtrl.init();
+    qingzhiCtrl.init();
   }
 
   // final List<double> hrvData = <double>[];

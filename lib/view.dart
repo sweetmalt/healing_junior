@@ -13,6 +13,7 @@ import 'package:healing_junior/apps/employee.dart';
 import 'package:healing_junior/apps/institution.dart';
 import 'package:healing_junior/apps/pdf.dart';
 import 'package:healing_junior/apps/pressure.dart';
+import 'package:healing_junior/apps/qing_zhi.dart';
 import 'package:healing_junior/apps/resting.dart';
 import 'package:healing_junior/apps/setting.dart';
 import 'package:healing_junior/apps/staff.dart';
@@ -271,11 +272,10 @@ class MyView extends GetView<MyCtrl> {
                     leading: Icon(Icons.games_rounded),
                     collapsedShape: Border(top: BorderSide(color: colorSurface)),
                     shape: Border(top: BorderSide(color: colorSurface)),
-                    title: MyTextP1("疗愈实验室"),
+                    title: MyTextP1("疗愈实验室 - 中医情志 - new"),
                     subtitle: MyTextP3("探索情绪跟踪如何与各种疗愈服务场景相结合", colorPrimaryContainer),
                     children: [
-                      const Text("( 开发中……，可在设置页面关闭显示该模块 )"),
-                      const SizedBox(height: 100),
+                      QingZhiView(),
                     ],
                   ),
                 ),
@@ -343,7 +343,6 @@ class MyView extends GetView<MyCtrl> {
                     title: MyTextP1("情绪跟踪"),
                     subtitle: MyTextP3("基于脑波变化趋势相干性的情绪发现与计数", colorPrimaryContainer),
                     children: [
-                      Obx(() => MyTextP2("当下情绪：${trendCrl.beEmo.value}")),
                       TrendView(),
                     ],
                   ),

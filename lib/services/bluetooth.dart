@@ -310,7 +310,6 @@ class EEGController extends GetxController {
 
       tempCount.value = 0;
     }
-    debugPrint('EEGController tick: ${DateTime.now()}');
   }
 
   void updateEEGData(EEGDataModel data) {

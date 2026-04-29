@@ -236,7 +236,7 @@ class CustomerCtrl extends GetxController {
   final RxBool isLoaded = false.obs;
   final RxBool isRecording = false.obs;
   //final RxBool isRecordingHrv = false.obs;
-  final sampleSize = 128.obs;
+  final sampleSize = 256.obs;
   final isNewSample = false.obs;
   final Map<String, dynamic> sampleData = {
     "record_data": {
@@ -279,7 +279,7 @@ class CustomerCtrl extends GetxController {
     recordings.clear();
     isLoaded.value = false;
     isRecording.value = false;
-    sampleSize.value = 128;
+    sampleSize.value = 256;
     isNewSample.value = false;
   }
 

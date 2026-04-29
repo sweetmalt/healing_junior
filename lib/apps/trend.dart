@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:healing_junior/index.dart';
 import 'package:healing_junior/view.dart';
 
-List<String> emoLabels = ["恐惧-", "紧绷-", "警觉+", "欢喜+", "焦虑-", "紧张-", "兴奋+", "快乐+", "厌恶-", "烦恼-", "镇定+", "放松+", "抑郁-", "悲伤-", "平静+", "满足+"];
+List<String> emoLabels = ["恐惧-", "愤怒-", "警觉+", "欢喜+", "焦虑-", "紧张-", "兴奋+", "快乐+", "厌恶-", "烦恼-", "镇定+", "放松+", "抑郁-", "悲伤-", "平静+", "满足+"];
 
 class TrendView extends GetView<TrendCtrl> {
   TrendView({super.key});
@@ -20,24 +21,8 @@ class TrendView extends GetView<TrendCtrl> {
 
 class TrendCtrl extends GetxController {
   final RxList<int> emoValues = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0].obs;
-  final beEmo="".obs;
-  // final RxInt emoV1 = 0.obs; //恐惧-
-  // final RxInt emoV2 = 0.obs; //紧绷-
-  // final RxInt emoV3 = 0.obs; //警觉+
-  // final RxInt emoV4 = 0.obs; //欢喜+
-  // final RxInt emoV5 = 0.obs; //焦虑-
-  // final RxInt emoV6 = 0.obs; //紧张-
-  // final RxInt emoV7 = 0.obs; //兴奋+
-  // final RxInt emoV8 = 0.obs; //快乐+
-  // final RxInt emoV9 = 0.obs; //厌恶-
-  // final RxInt emoV10 = 0.obs; //烦恼-
-  // final RxInt emoV11 = 0.obs; //镇定+
-  // final RxInt emoV12 = 0.obs; //放松+
-  // final RxInt emoV13 = 0.obs; //抑郁-
-  // final RxInt emoV14 = 0.obs; //悲伤-
-  // final RxInt emoV15 = 0.obs; //平静+
-  // final RxInt emoV16 = 0.obs; //满足+
-  List<String> trend(double deltaTrendSign, double thetaTrendSign, double alphaTrendSign, double betaTrendSign, double gammaTrendSign) {
+  final IndexCtrl indexCtrl = Get.put(IndexCtrl());
+  void trend(double deltaTrendSign, double thetaTrendSign, double alphaTrendSign, double betaTrendSign, double gammaTrendSign) {
     List<String> trendEmos = [];
     if (betaTrendSign < 0) {
       //正向情绪
@@ -162,30 +147,15 @@ class TrendCtrl extends GetxController {
         }
       }
     }
-    beEmo.value=trendEmos.join(",");
-    return trendEmos;
+    if (trendEmos.isNotEmpty) {
+      indexCtrl.updateTalk(trendEmos.join(","));
+    }
   }
 
   void init() {
     for (int i = 0; i < emoValues.length; i++) {
       emoValues[i] = 0;
     }
-    // emoV1.value = 0;
-    // emoV2.value = 0;
-    // emoV3.value = 0;
-    // emoV4.value = 0;
-    // emoV5.value = 0;
-    // emoV6.value = 0;
-    // emoV7.value = 0;
-    // emoV8.value = 0;
-    // emoV9.value = 0;
-    // emoV10.value = 0;
-    // emoV11.value = 0;
-    // emoV12.value = 0;
-    // emoV13.value = 0;
-    // emoV14.value = 0;
-    // emoV15.value = 0;
-    // emoV16.value = 0;
   }
 }
 

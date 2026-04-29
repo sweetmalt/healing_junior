@@ -357,6 +357,10 @@ class DrawCtrl extends GetxController {
       Get.snackbar("提示", "请先生成图片");
       return;
     }
+    if (!employeeCtrl.isRegist.value) {
+      Get.snackbar("请先登录", "未登录或未联网，无法使用AI功能");
+      return;
+    }
     //余额不足
     if (employeeCtrl.paymentBalance.value < 1) {
       Get.snackbar("请先充值", "您的账号余额不足，无法使用AI功能");
