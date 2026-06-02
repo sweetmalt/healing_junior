@@ -6,7 +6,10 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 import 'package:record/record.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:healing_junior/apps/customer.dart';
 import 'package:healing_junior/apps/employee.dart';
 import 'package:healing_junior/apps/face.dart';
@@ -1170,6 +1173,145 @@ class AIDialogCtrl extends GetxController {
     return '';
   }
 
+  /// 生成PDF报告
+  Future<File?> generatePdf(String fileName) async {
+    try {
+      final markdown = await readReport(fileName);
+      if (markdown.isEmpty) return null;
+
+      final pdf = pw.Document();
+      final pdfContent = _parseMarkdownToPdf(markdown);
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(40),
+          build: (context) => pdfContent,
+        ),
+      );
+
+      // 保存PDF
+      final dir = await _getReportDirectory();
+      final pdfFileName = fileName.replaceAll('.md', '.pdf');
+      final pdfFile = File('${dir.path}/$pdfFileName');
+      await pdfFile.writeAsBytes(await pdf.save());
+      
+      // ignore: avoid_print
+      print('[AIDialog] PDF已生成: ${pdfFile.path}');
+      return pdfFile;
+    } catch (e) {
+      // ignore: avoid_print
+      print('[AIDialog] 生成PDF失败: $e');
+      return null;
+    }
+  }
+
+  /// 分享报告（Markdown或PDF）
+  Future<void> shareReport(ReportInfo reportInfo, {bool asPdf = false}) async {
+    try {
+      File? file;
+
+      if (asPdf) {
+        // 生成并分享PDF
+        file = await generatePdf(reportInfo.fileName);
+      } else {
+        // 分享原始Markdown
+        final dir = await _getReportDirectory();
+        file = File('${dir.path}/${reportInfo.fileName}');
+        if (!await file.exists()) {
+          Get.snackbar('分享失败', '文件不存在');
+          return;
+        }
+      }
+
+      if (file != null && await file.exists()) {
+        await SharePlus.instance.share(
+          ShareParams(
+            files: [XFile(file.path)],
+            text: '疗愈报告 - ${reportInfo.title}',
+          ),
+        );
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print('[AIDialog] 分享失败: $e');
+      Get.snackbar('分享失败', '无法分享报告');
+    }
+  }
+
+  /// 解析Markdown内容为PDF widgets
+  List<pw.Widget> _parseMarkdownToPdf(String markdown) {
+    final List<pw.Widget> widgets = [];
+    final lines = markdown.split('\n');
+    
+    for (final line in lines) {
+      if (line.isEmpty) {
+        widgets.add(pw.SizedBox(height: 8));
+        continue;
+      }
+
+      // 标题处理
+      if (line.startsWith('#### ')) {
+        widgets.add(pw.SizedBox(height: 12));
+        widgets.add(pw.Text(
+          line.substring(5),
+          style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+        ));
+        widgets.add(pw.SizedBox(height: 6));
+      } else if (line.startsWith('### ')) {
+        widgets.add(pw.SizedBox(height: 14));
+        widgets.add(pw.Text(
+          line.substring(4),
+          style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+        ));
+        widgets.add(pw.SizedBox(height: 8));
+      } else if (line.startsWith('## ')) {
+        widgets.add(pw.SizedBox(height: 16));
+        widgets.add(pw.Text(
+          line.substring(3),
+          style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+        ));
+        widgets.add(pw.SizedBox(height: 10));
+      } else if (line.startsWith('# ')) {
+        widgets.add(pw.SizedBox(height: 18));
+        widgets.add(pw.Text(
+          line.substring(2),
+          style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold),
+        ));
+        widgets.add(pw.SizedBox(height: 12));
+      }
+      // 列表项
+      else if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
+        widgets.add(pw.Padding(
+          padding: const pw.EdgeInsets.only(left: 16),
+          child: pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text('• ', style: const pw.TextStyle(fontSize: 12)),
+              pw.Expanded(
+                child: pw.Text(
+                  line.trim().substring(2),
+                  style: const pw.TextStyle(fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        ));
+        widgets.add(pw.SizedBox(height: 4));
+      }
+      // 普通文本
+      else {
+        widgets.add(pw.Text(
+          line,
+          style: const pw.TextStyle(fontSize: 12),
+        ));
+        widgets.add(pw.SizedBox(height: 4));
+      }
+    }
+
+    return widgets;
+  }
+
   /// 获取是否显示生成报告按钮
   bool get showReportButton => _showReportButton && !isGeneratingReport.value;
 
@@ -1811,6 +1953,12 @@ class _ReportViewerSheet extends StatelessWidget {
                   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
                 const SizedBox(width: 8),
+                // 分享按钮
+                IconButton(
+                  icon: const Icon(Icons.share, size: 22),
+                  onPressed: () => _showShareOptions(context),
+                  tooltip: '分享',
+                ),
                 IconButton(
                   icon: const Icon(Icons.close),
                   onPressed: () => Get.back(),
@@ -1848,6 +1996,39 @@ class _ReportViewerSheet extends StatelessWidget {
 
   String _formatDateTime(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  /// 显示分享选项
+  void _showShareOptions(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.description),
+              title: const Text('分享 Markdown'),
+              subtitle: const Text('分享原始文本格式'),
+              onTap: () {
+                Navigator.pop(context);
+                ctrl.shareReport(report, asPdf: false);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.picture_as_pdf),
+              title: const Text('分享 PDF'),
+              subtitle: const Text('生成并分享PDF文件'),
+              onTap: () {
+                Navigator.pop(context);
+                ctrl.shareReport(report, asPdf: true);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
   }
 }
 
