@@ -84,6 +84,8 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/
+    - assets/images/card_oh/1/
+    - assets/images/card_oh/2/
     - assets/audios/
 
 # flutter_icons:
