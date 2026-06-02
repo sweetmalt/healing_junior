@@ -749,7 +749,9 @@ $dialogContent''';
 
         for (final line in lines) {
           if (line.startsWith('event:')) {
-            eventName = line.substring(5).trim();
+            // Coze格式是双冒号："event::conversation.message.completed"
+            // 需要去掉前缀冒号
+            eventName = line.substring(5).replaceFirst(':', '').trim();
           } else if (line.startsWith('data:')) {
             jsonStr = line.substring(5).trim();
           }
@@ -815,7 +817,7 @@ class AIDialogCtrl extends GetxController {
   // ========== 报告相关 ==========
   final reportList = <ReportInfo>[].obs;  // 已存储的报告列表
   final isGeneratingReport = false.obs;     // 是否正在生成报告
-  bool _showReportButton = false;          // 是否显示"生成报告"按钮
+  final _showReportButton = false.obs;   // 是否显示"生成报告"按钮
 
   // ========== 说话人分析 ==========
   final Map<int, SpeakerRoleInfo> _speakerInfos = {};
@@ -1021,8 +1023,8 @@ class AIDialogCtrl extends GetxController {
     // 停止前做一次最终分析
     _reAnalyze();
 
-    // 判断是否显示"生成报告"按钮（文本超过500字）
-    _showReportButton = currentFullText.value.length > 500;
+    // 判断是否显示"生成报告"按钮（文本超过100字）
+    _showReportButton.value = currentFullText.value.length > 100;
   }
 
   // ==================== 报告相关方法 ====================
@@ -1047,13 +1049,19 @@ class AIDialogCtrl extends GetxController {
       for (final entity in files) {
         if (entity is File && entity.path.endsWith('.md')) {
           final fileName = entity.path.split(Platform.pathSeparator).last;
-          // 解析文件名格式：card_oh_report_YYYYMMDD_HHmmss_标题.md
-          // 提取标题（去掉前缀和日期部分）
-          final parts = fileName.replaceFirst('card_oh_report_', '').replaceFirst('.md', '').split('_');
-          String title = fileName; // 默认
-          if (parts.length >= 3) {
-            // 前两部分是日期时间，第三部分开始是标题
-            title = parts.sublist(2).join('_');
+          // 解析文件名格式：card_oh_report_客户昵称_YYYYMMDD_HHmmss.md
+          // dateStr固定为13字符（YYYYMMDD_HHmmss）
+          String title = '匿名';
+          try {
+            // 去掉前缀和后缀，剩余部分即为 "客户昵称_YYYYMMDD_HHmmss"
+            final remaining = fileName.replaceFirst('card_oh_report_', '').replaceFirst('.md', '');
+            if (remaining.length > 14) {
+              // 前缀是客户昵称（长度 = 总长度 - 13位日期时间）
+              title = remaining.substring(0, remaining.length - 14);
+              if (title.isEmpty) title = '匿名';
+            }
+          } catch (_) {
+            title = '匿名';
           }
           
           final stat = await entity.stat();
@@ -1073,11 +1081,18 @@ class AIDialogCtrl extends GetxController {
 
   /// 生成并保存报告
   Future<bool> generateReport() async {
-    if (isGeneratingReport.value) return false;
-    if (currentFullText.value.isEmpty) return false;
+    // 检查是否正在生成
+    if (isGeneratingReport.value) {
+      Get.snackbar('提示', '报告正在生成中...', snackPosition: SnackPosition.BOTTOM);
+      return false;
+    }
+    // 检查是否有内容
+    if (currentFullText.value.isEmpty) {
+      Get.snackbar('提示', '请先进行录音', snackPosition: SnackPosition.BOTTOM);
+      return false;
+    }
 
     isGeneratingReport.value = true;
-    _showReportButton = false; // 隐藏按钮
 
     try {
       // 获取疗愈师和来访者姓名
@@ -1102,40 +1117,62 @@ class AIDialogCtrl extends GetxController {
         return '【$label说】：${e.value}';
       }).join('\n');
 
+      // 限制字数：超过5000字时只取最新5000字（越到最后的内容越有价值）
+      final limitedContent = dialogContent.length > 5000
+          ? dialogContent.substring(dialogContent.length - 5000)
+          : dialogContent;
+
+      // 显示"正在生成"的提示（不自动消失）
+      Get.snackbar(
+        '提示', 
+        '正在生成报告...', 
+        snackPosition: SnackPosition.BOTTOM, 
+        duration: const Duration(hours: 1),  // 长时间显示，直到手动关闭
+        showProgressIndicator: true,
+      );
+
       // 调用Coze生成报告
       final markdown = await CozeReportService.generateReport(
         therapistName: therapistName,
         clientName: clientName,
         dialogDate: DateTime.now(),
-        dialogContent: dialogContent,
+        dialogContent: limitedContent,
       );
 
       if (markdown.isEmpty) {
         isGeneratingReport.value = false;
+        Get.closeCurrentSnackbar();  // 关闭"正在生成"提示
+        Get.snackbar('错误', '报告生成失败，请重试', snackPosition: SnackPosition.BOTTOM);
         return false;
       }
 
-      // 保存报告
-      await _saveReport(markdown);
+      // 保存报告（使用顾客昵称）
+      await _saveReport(markdown, clientName);
 
       // 重新加载报告列表
       await _loadReportList();
 
       isGeneratingReport.value = false;
+      Get.closeCurrentSnackbar();  // 关闭"正在生成"提示
+      Get.snackbar('成功', '报告已生成', snackPosition: SnackPosition.BOTTOM);
       return true;
     } catch (e) {
       isGeneratingReport.value = false;
+      Get.snackbar('错误', '报告生成异常: $e', snackPosition: SnackPosition.BOTTOM);
       return false;
     }
   }
 
   /// 保存报告到本地
-  Future<void> _saveReport(String markdown) async {
+  /// [clientName] 顾客昵称，用于文件名（如果没有则显示"匿名"）
+  Future<void> _saveReport(String markdown, String clientName) async {
     try {
       final dir = await _getReportDirectory();
       final now = DateTime.now();
       final dateStr = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}';
-      final fileName = 'card_oh_report_$dateStr.md';
+      // 使用顾客昵称，如果没有则显示"匿名"
+      final displayName = (clientName.isEmpty || clientName == '来访者') ? '匿名' : clientName;
+      final fileName = 'card_oh_report_${displayName}_$dateStr.md';
       final file = File('${dir.path}/$fileName');
       await file.writeAsString(markdown);
     } catch (_) {}
@@ -1288,7 +1325,7 @@ class AIDialogCtrl extends GetxController {
   }
 
   /// 获取是否显示生成报告按钮
-  bool get showReportButton => _showReportButton && !isGeneratingReport.value;
+  bool get showReportButton => _showReportButton.value && !isGeneratingReport.value;
 
   /// 重新分析并生成对话视图
   /// 基于每个speaker的累积文本，按标点分割成句子后分析
@@ -1789,29 +1826,46 @@ class _AIDialogContent extends StatelessWidget {
   }
 
   /// 横向滑动的报告抽屉区
+  /// 横向滑动的报告抽屉区（始终显示）
   Widget _buildReportsDrawer(AIDialogCtrl ctrl) {
-    return Obx(() {
-      final reports = ctrl.reportList;
-      if (reports.isEmpty) return const SizedBox.shrink();
-      
-      return Container(
-        height: 80,
-        decoration: BoxDecoration(
-          color: Colors.grey[50],
-          border: Border(top: BorderSide(color: Colors.grey[200]!)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(left: 12, top: 6),
-              child: Text(
-                '历史报告',
-                style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-              ),
+    return Container(
+      height: 90,
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        border: Border(top: BorderSide(color: Colors.grey[200]!)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 标题行
+          Padding(
+            padding: const EdgeInsets.only(left: 12, top: 8),
+            child: Row(
+              children: [
+                Icon(Icons.folder_open, size: 14, color: Colors.grey[600]),
+                const SizedBox(width: 4),
+                Text(
+                  '报告列表',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600], fontWeight: FontWeight.w500),
+                ),
+              ],
             ),
-            Expanded(
-              child: ListView.builder(
+          ),
+          // 报告内容区
+          Expanded(
+            child: Obx(() {
+              final reports = ctrl.reportList;
+              if (reports.isEmpty) {
+                // 空状态提示
+                return Center(
+                  child: Text(
+                    '暂无报告，录音结束后可生成',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                  ),
+                );
+              }
+              // 有报告时横向滚动显示
+              return ListView.builder(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 itemCount: reports.length,
@@ -1822,12 +1876,12 @@ class _AIDialogContent extends StatelessWidget {
                     onTap: () => _showReportViewer(ctrl, report),
                   );
                 },
-              ),
-            ),
-          ],
-        ),
-      );
-    });
+              );
+            }),
+          ),
+        ],
+      ),
+    );
   }
 
   /// 显示报告查看器
