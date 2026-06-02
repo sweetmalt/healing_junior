@@ -1149,7 +1149,7 @@ class AIDialogCtrl extends GetxController {
       final dir = await _getReportDirectory();
       final now = DateTime.now();
       final dateStr = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}';
-      final fileName = 'card_oh_report_${dateStr}.md';
+      final fileName = 'card_oh_report_$dateStr.md';
       final file = File('${dir.path}/$fileName');
       await file.writeAsString(markdown);
     } catch (e) {
@@ -1712,7 +1712,7 @@ class _AIDialogContent extends StatelessWidget {
                 Text('提示问题', style: TextStyle(fontSize: 13, color: Colors.grey[700], fontWeight: FontWeight.w500)),
                 const Spacer(),
                 Text(
-                  '${hintList.length}条',
+                  '$hintList.length条',
                   style: TextStyle(fontSize: 11, color: Colors.grey[500]),
                 ),
               ],
@@ -2027,116 +2027,6 @@ class _ReportViewerSheet extends StatelessWidget {
             const SizedBox(height: 8),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// 对话气泡组件
-
-/// 对话气泡组件
-class _DialogBubble extends StatelessWidget {
-  final ProcessedDialogEntry entry;
-
-  const _DialogBubble({required this.entry});
-
-  @override
-  Widget build(BuildContext context) {
-    if (entry.isHint) {
-      return _buildHintBubble();
-    }
-
-    final role = entry.role;
-    final isTherapist = role == SpeakerRole.therapist;
-    final isLeft = isTherapist || role == null;
-
-    Color bubbleColor;
-    Color? roleColor;
-    String roleName;
-
-    if (role == null) {
-      bubbleColor = Colors.grey[100]!;
-      roleColor = Colors.grey[600];
-      roleName = '待确认 ${entry.speakerLabel}';
-    } else if (isTherapist) {
-      bubbleColor = const Color(0xFFE8F5E9);
-      roleColor = const Color(0xFF4CAF50);
-      roleName = '疗愈师 ${entry.speakerLabel}';
-    } else {
-      bubbleColor = const Color(0xFFE3F2FD);
-      roleColor = const Color(0xFF2196F3);
-      roleName = '顾客 ${entry.speakerLabel}';
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: isLeft ? MainAxisAlignment.start : MainAxisAlignment.end,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: roleColor?.withValues(alpha: 0.2),
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                isTherapist ? '🧘' : '👤',
-                style: const TextStyle(fontSize: 14),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: bubbleColor,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    roleName,
-                    style: TextStyle(fontSize: 11, color: roleColor, fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    entry.text,
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHintBubble() {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.amber[50],
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.amber[200]!),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.lightbulb_outline, color: Colors.amber[700], size: 18),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              entry.text,
-              style: TextStyle(color: Colors.amber[900], fontSize: 13, fontStyle: FontStyle.italic),
-            ),
-          ),
-        ],
       ),
     );
   }
