@@ -584,20 +584,41 @@ class CozeHintService {
     }
   }
 
-  /// 解析SSE响应，Coze直接返回纯文本字符串
+  /// 解析SSE响应，Coze流式响应格式
+  /// 格式: event: xxx\ndata: {json}\n\n
   static String _parseResponse(String response) {
     try {
-      final lines = response.split('\n');
-      for (final line in lines) {
-        if (line.startsWith('data:')) {
-          final jsonStr = line.substring(5).trim();
-          if (jsonStr.isEmpty || jsonStr == '[DONE]') continue;
+      // 按事件分割，每个事件格式为: event: xxx\ndata: {json}\n\n
+      final eventBlocks = response.split('\n\n');
+      for (final block in eventBlocks) {
+        if (block.isEmpty) continue;
 
+        final lines = block.split('\n');
+        String? eventName;
+        String? jsonStr;
+
+        for (final line in lines) {
+          if (line.startsWith('event:')) {
+            eventName = line.substring(5).trim();
+          } else if (line.startsWith('data:')) {
+            jsonStr = line.substring(5).trim();
+          }
+        }
+
+        // 检查是否是消息完成事件
+        if (eventName == 'conversation.message.completed' && jsonStr != null && jsonStr.isNotEmpty) {
           final data = jsonDecode(jsonStr);
-          if (data['type'] == 'answer' && data['content'] != null) {
-            final content = data['content'].toString().trim();
-            if (content.isNotEmpty) {
-              return content;
+          // content 字段可能是字符串，也可能是对象数组
+          if (data['content'] != null) {
+            final content = data['content'];
+            if (content is String) {
+              return content.trim();
+            } else if (content is List && content.isNotEmpty) {
+              // 如果是数组，取第一个元素的 text 字段
+              final firstItem = content[0];
+              if (firstItem is Map && firstItem['text'] != null) {
+                return firstItem['text'].toString().trim();
+              }
             }
           }
         }
@@ -709,17 +730,37 @@ $dialogContent''';
   /// 解析SSE响应，返回Markdown内容
   static String _parseResponse(String response) {
     try {
-      final lines = response.split('\n');
-      for (final line in lines) {
-        if (line.startsWith('data:')) {
-          final jsonStr = line.substring(5).trim();
-          if (jsonStr.isEmpty || jsonStr == '[DONE]') continue;
+      // 按事件分割，每个事件格式为: event: xxx\ndata: {json}\n\n
+      final eventBlocks = response.split('\n\n');
+      for (final block in eventBlocks) {
+        if (block.isEmpty) continue;
 
+        final lines = block.split('\n');
+        String? eventName;
+        String? jsonStr;
+
+        for (final line in lines) {
+          if (line.startsWith('event:')) {
+            eventName = line.substring(5).trim();
+          } else if (line.startsWith('data:')) {
+            jsonStr = line.substring(5).trim();
+          }
+        }
+
+        // 检查是否是消息完成事件
+        if (eventName == 'conversation.message.completed' && jsonStr != null && jsonStr.isNotEmpty) {
           final data = jsonDecode(jsonStr);
-          if (data['type'] == 'answer' && data['content'] != null) {
-            final content = data['content'].toString().trim();
-            if (content.isNotEmpty) {
-              return content;
+          // content 字段可能是字符串，也可能是对象数组
+          if (data['content'] != null) {
+            final content = data['content'];
+            if (content is String) {
+              return content.trim();
+            } else if (content is List && content.isNotEmpty) {
+              // 如果是数组，取第一个元素的 text 字段
+              final firstItem = content[0];
+              if (firstItem is Map && firstItem['text'] != null) {
+                return firstItem['text'].toString().trim();
+              }
             }
           }
         }
