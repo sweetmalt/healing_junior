@@ -20,7 +20,7 @@ class QingZhiMUsicView extends GetView<QingZhiMusicCtrl> {
         const SizedBox(height: 20),
         Table(
             defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-            border: TableBorder.all(color: colorSecondary, width: 2, borderRadius: BorderRadius.circular(5)),
+            border: TableBorder.all(color: colorPrimary, width: 1, borderRadius: BorderRadius.circular(5)),
             columnWidths: {
               0: FixedColumnWidth(50),
               1: FixedColumnWidth(50),
@@ -31,66 +31,83 @@ class QingZhiMUsicView extends GetView<QingZhiMusicCtrl> {
             },
             children: [
               TableRow(children: [
-                MyTextP1("  五脏"),
-                MyTextP1("  五行"),
-                MyTextP1("  五音-简谱"),
-                MyTextP1("  对应情志"),
-                MyTextP1("  核心作用"),
-                MyTextP1("  播放"),
+                Container(alignment: Alignment.center, height: 40, child: MyTextP2("五脏")),
+                Container(alignment: Alignment.center, height: 40, child: MyTextP2("五行")),
+                Container(alignment: Alignment.center, height: 40, child: MyTextP2("五音-简谱")),
+                Container(alignment: Alignment.center, height: 40, child: MyTextP2("对应情志")),
+                Container(alignment: Alignment.center, height: 40, child: MyTextP2("核心作用")),
+                Container(alignment: Alignment.center, height: 40, child: MyTextP2("选择")),
+              ]),
+              TableRow(decoration: BoxDecoration(color: colorSecondary, borderRadius: BorderRadius.circular(40)), children: [
+                Container(alignment: Alignment.center, height: 40, child: MyTextP2("肝")),
+                Container(alignment: Alignment.center, height: 40, child: MyTextP2("木")),
+                Container(alignment: Alignment.center, height: 40, child: MyTextP2("角 (Mi)")),
+                Container(alignment: Alignment.center, height: 40, child: MyTextP2("怒")),
+                Container(alignment: Alignment.center, height: 40, child: MyTextP2(QingZhiMusicCtrl.valuePrompt[0])),
+                Container(
+                    alignment: Alignment.center,
+                    height: 40,
+                    child: Obx(() => controller.playingMusicIndex.value == 0 && controller.isPlaying.value
+                        ? IconButton(icon: Icon(Icons.check_circle_rounded), onPressed: () => controller.stopMusic())
+                        : IconButton(icon: Icon(Icons.check_circle_outline_rounded), onPressed: () => controller.playMusic(0)))),
               ]),
               TableRow(children: [
-                MyTextP2("  肝"),
-                MyTextP2("  木"),
-                MyTextP2("  角 (Mi)"),
-                MyTextP2("  怒"),
-                MyTextP2("  ${QingZhiMusicCtrl.valuePrompt[0]}"),
-                Obx(() => controller.playingMusicIndex.value == 0 && controller.isPlaying.value
-                    ? IconButton(icon: Icon(Icons.pause), onPressed: () => controller.stopMusic())
-                    : IconButton(icon: Icon(Icons.play_arrow), onPressed: () => controller.playMusic(0))),
+                Container(alignment: Alignment.center, height: 60, child: MyTextP2("心")),
+                Container(alignment: Alignment.center, height: 60, child: MyTextP2("火")),
+                Container(alignment: Alignment.center, height: 60, child: MyTextP2("徵 (Sol)")),
+                Container(alignment: Alignment.center, height: 60, child: MyTextP2("喜")),
+                Container(alignment: Alignment.center, height: 60, child: MyTextP2(QingZhiMusicCtrl.valuePrompt[1])),
+                Container(
+                    alignment: Alignment.center,
+                    height: 60,
+                    child: Obx(() => controller.playingMusicIndex.value == 1 && controller.isPlaying.value
+                        ? IconButton(icon: Icon(Icons.check_circle_rounded), onPressed: () => controller.stopMusic())
+                        : IconButton(icon: Icon(Icons.check_circle_outline_rounded), onPressed: () => controller.playMusic(1)))),
+              ]),
+              TableRow(decoration: BoxDecoration(color: colorSecondary, borderRadius: BorderRadius.circular(40)), children: [
+                Container(alignment: Alignment.center, height: 40, child: MyTextP2("脾")),
+                Container(alignment: Alignment.center, height: 40, child: MyTextP2("土")),
+                Container(alignment: Alignment.center, height: 40, child: MyTextP2("宫 (Do)")),
+                Container(alignment: Alignment.center, height: 40, child: MyTextP2("思")),
+                Container(alignment: Alignment.center, height: 40, child: MyTextP2(QingZhiMusicCtrl.valuePrompt[2])),
+                Container(
+                    alignment: Alignment.center,
+                    height: 40,
+                    child: Obx(() => controller.playingMusicIndex.value == 2 && controller.isPlaying.value
+                        ? IconButton(icon: Icon(Icons.check_circle_rounded), onPressed: () => controller.stopMusic())
+                        : IconButton(icon: Icon(Icons.check_circle_outline_rounded), onPressed: () => controller.playMusic(2)))),
               ]),
               TableRow(children: [
-                MyTextP2("  心"),
-                MyTextP2("  火"),
-                MyTextP2("  徵 (Sol)"),
-                MyTextP2("  喜"),
-                MyTextP2("  ${QingZhiMusicCtrl.valuePrompt[1]}"),
-                Obx(() => controller.playingMusicIndex.value == 1 && controller.isPlaying.value
-                    ? IconButton(icon: Icon(Icons.pause), onPressed: () => controller.stopMusic())
-                    : IconButton(icon: Icon(Icons.play_arrow), onPressed: () => controller.playMusic(1))),
+                Container(alignment: Alignment.center, height: 60, child: MyTextP2("肺")),
+                Container(alignment: Alignment.center, height: 60, child: MyTextP2("金")),
+                Container(alignment: Alignment.center, height: 60, child: MyTextP2("商 (Re)")),
+                Container(alignment: Alignment.center, height: 60, child: MyTextP2("悲/忧")),
+                Container(alignment: Alignment.center, height: 60, child: MyTextP2(QingZhiMusicCtrl.valuePrompt[3])),
+                Container(
+                    alignment: Alignment.center,
+                    height: 60,
+                    child: Obx(() => controller.playingMusicIndex.value == 3 && controller.isPlaying.value
+                        ? IconButton(icon: Icon(Icons.check_circle_rounded), onPressed: () => controller.stopMusic())
+                        : IconButton(icon: Icon(Icons.check_circle_outline_rounded), onPressed: () => controller.playMusic(3)))),
               ]),
-              TableRow(children: [
-                MyTextP2("  脾"),
-                MyTextP2("  土"),
-                MyTextP2("  宫 (Do)"),
-                MyTextP2("  思"),
-                MyTextP2("  ${QingZhiMusicCtrl.valuePrompt[2]}"),
-                Obx(() => controller.playingMusicIndex.value == 2 && controller.isPlaying.value
-                    ? IconButton(icon: Icon(Icons.pause), onPressed: () => controller.stopMusic())
-                    : IconButton(icon: Icon(Icons.play_arrow), onPressed: () => controller.playMusic(2))),
-              ]),
-              TableRow(children: [
-                MyTextP2("  肺"),
-                MyTextP2("  金"),
-                MyTextP2("  商 (Re)"),
-                MyTextP2("  悲/忧"),
-                MyTextP2("  ${QingZhiMusicCtrl.valuePrompt[3]}"),
-                Obx(() => controller.playingMusicIndex.value == 3 && controller.isPlaying.value
-                    ? IconButton(icon: Icon(Icons.pause), onPressed: () => controller.stopMusic())
-                    : IconButton(icon: Icon(Icons.play_arrow), onPressed: () => controller.playMusic(3))),
-              ]),
-              TableRow(children: [
-                MyTextP2("  肾"),
-                MyTextP2("  水"),
-                MyTextP2("  羽 (La)"),
-                MyTextP2("  恐/惊"),
-                MyTextP2("  ${QingZhiMusicCtrl.valuePrompt[4]}"),
-                Obx(() => controller.playingMusicIndex.value == 4 && controller.isPlaying.value
-                    ? IconButton(icon: Icon(Icons.pause), onPressed: () => controller.stopMusic())
-                    : IconButton(icon: Icon(Icons.play_arrow), onPressed: () => controller.playMusic(4))),
+              TableRow(decoration: BoxDecoration(color: colorSecondary, borderRadius: BorderRadius.circular(40)), children: [
+                Container(alignment: Alignment.center, height: 40, child: MyTextP2("肾")),
+                Container(alignment: Alignment.center, height: 40, child: MyTextP2("水")),
+                Container(alignment: Alignment.center, height: 40, child: MyTextP2("羽 (La)")),
+                Container(alignment: Alignment.center, height: 40, child: MyTextP2("恐/惊")),
+                Container(alignment: Alignment.center, height: 40, child: MyTextP2(QingZhiMusicCtrl.valuePrompt[4])),
+                Container(
+                    alignment: Alignment.center,
+                    height: 40,
+                    child: Obx(() => controller.playingMusicIndex.value == 4 && controller.isPlaying.value
+                        ? IconButton(icon: Icon(Icons.check_circle_rounded), onPressed: () => controller.stopMusic())
+                        : IconButton(icon: Icon(Icons.check_circle_outline_rounded), onPressed: () => controller.playMusic(4)))),
               ]),
             ]),
-        const SizedBox(height: 20),
-        MyTextP2(QingZhiMusicCtrl.subTitle),
+        const SizedBox(height: 40),
+        QingZhiMUsicPlayerView(),
+        const SizedBox(height: 40),
+        MyTextP3(QingZhiMusicCtrl.subTitle, colorPrimaryContainer),
         Image.asset("assets/images/shanghai.png", width: 150),
         const SizedBox(height: 20),
       ]),
@@ -99,7 +116,7 @@ class QingZhiMUsicView extends GetView<QingZhiMusicCtrl> {
 }
 
 class QingZhiMusicCtrl extends GetxController {
-  static const title = "中医情志 - 疗愈音乐";
+  static const title = "情志疗愈音乐";
   static const subTitle = "* 上海音乐学院“人工智能音乐疗愈重点实验室”联袂奉献 *";
   static const valuePrompt = ["疏肝理气、平息易怒", "养心安神、振奋心气", "健脾和胃、缓解焦虑", "清肃肺气、宣解悲忧", "滋水涵木、安神定志"];
   static const musicTypes = ["relax", "relax", "relax", "relax", "relax"];
@@ -115,7 +132,7 @@ class QingZhiMusicCtrl extends GetxController {
   final AudioPlayer _audioPlayer = AudioPlayer();
   final isPlaying = false.obs;
   final playingMusicIndex = (-1).obs;
-  
+
   final IndexCtrl indexCtrl = Get.put(IndexCtrl());
 
   /// 第三方登录获取token
@@ -266,5 +283,84 @@ class MusicInfo {
   bool get isExpired {
     if (expiresTime == null) return false;
     return DateTime.now().isAfter(expiresTime!);
+  }
+}
+
+class QingZhiMUsicPlayerView extends GetView<QingZhiMusicCtrl> {
+  QingZhiMUsicPlayerView({super.key});
+
+  @override
+  final controller = Get.put(QingZhiMusicCtrl());
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: EdgeInsets.all(10),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 80,
+            height: 80,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              border: BoxBorder.all(color: colorSurface, width: 1),
+              borderRadius: BorderRadius.circular(40),
+            ),
+            child: Obx(
+              () => IconButton(
+                icon: controller.isLoading.value
+                    ? CircularProgressIndicator()
+                    : controller.isPlaying.value
+                        ? Icon(Icons.pause)
+                        : Icon(Icons.play_arrow),
+                color: colorSurface,
+                iconSize: 60,
+                onPressed: () async {
+                  if (controller.isPlaying.value) {
+                    await controller.stopMusic();
+                  } else {
+                    if (controller.playingMusicIndex.value >= 0) {
+                      await controller.playMusic(controller.playingMusicIndex.value);
+                    } else {
+                      controller.playingMusicIndex.value = 0;
+                      await controller.playMusic(controller.playingMusicIndex.value);
+                    }
+                  }
+                },
+              ),
+            ),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              IconButton(
+                icon: Icon(Icons.keyboard_double_arrow_left),
+                color: colorPrimaryContainer,
+                iconSize: 30,
+                onPressed: () async {
+                  if (controller.playingMusicIndex.value > 0) {
+                    await controller.playMusic(controller.playingMusicIndex.value - 1);
+                  } else if (controller.playingMusicIndex.value == 0) {
+                    await controller.playMusic(4);
+                  }
+                },
+              ),
+              IconButton(
+                icon: Icon(Icons.keyboard_double_arrow_right),
+                color: colorPrimaryContainer,
+                iconSize: 30,
+                onPressed: () async {
+                  if (controller.playingMusicIndex.value >= 0 && controller.playingMusicIndex.value < 4) {
+                    await controller.playMusic(controller.playingMusicIndex.value + 1);
+                  } else if (controller.playingMusicIndex.value == 4) {
+                    await controller.playMusic(0);
+                  }
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:healing_junior/apps/bagua.dart';
+import 'package:healing_junior/apps/card_oh.dart';
 import 'package:healing_junior/index.dart';
 import 'package:healing_junior/view.dart';
 
@@ -23,17 +24,21 @@ class FaceView extends GetView<FaceCtrl> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const SizedBox(height: 60),
             MyTextH3(controller.welcome, colorPrimaryContainer),
-            const SizedBox(height: 60),
+            const SizedBox(height: 80),
             ElevatedButton(
               child: Text("脑电检测"),
               onPressed: () => indexCtrl.updateIndex(1),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 40),
             ElevatedButton(
-              child: Text("卡牌疗愈"),
+              child: Text("易经卡牌"),
               onPressed: () => Get.to(() => BaguaView()),
+            ),
+            const SizedBox(height: 40),
+            ElevatedButton(
+              child: Text("OH卡疗愈"),
+              onPressed: () => Get.to(() => CardohView()),
             ),
           ],
         ),
