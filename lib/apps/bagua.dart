@@ -732,7 +732,7 @@ class BaguaView extends GetView<BaguaCtrl> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     SizedBox(
-                      width: 36,
+                      width: 80,
                       child: Text('${y['symbol']} ${y['position']}',
                           style: TextStyle(color: y['yang'] ? const Color(0xFFFF8844) : const Color(0xFF66BBAA), fontSize: 20)),
                     ),
