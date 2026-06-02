@@ -545,17 +545,26 @@ class CozeHintService {
   static Future<String> generateHint({
     required String conversation,
   }) async {
+    debugPrint('[CozeHint] generateHint 被调用');
+    debugPrint('[CozeHint] conversation 长度: ${conversation.length}');
+
     if (conversation.isEmpty) {
+      debugPrint('[CozeHint] conversation 为空，返回空字符串');
       return '';
     }
 
     // 获取bearer token
+    debugPrint('[CozeHint] 开始获取 bearer token...');
     final bearer = await _getBearerToken();
+    debugPrint('[CozeHint] bearer token 长度: ${bearer.length}');
+
     if (bearer.isEmpty) {
+      debugPrint('[CozeHint] bearer 为空，返回空字符串');
       return '';
     }
 
     try {
+      debugPrint('[CozeHint] 发送请求到 Coze API...');
       final client = http.Client();
       final request = http.Request('POST', Uri.parse(_apiBase));
       request.headers.addAll({
@@ -571,15 +580,24 @@ class CozeHintService {
         ],
       });
 
+      debugPrint('[CozeHint] 请求体: bot_id=$_botId, stream=false');
+
       final response = await client.send(request);
+      debugPrint('[CozeHint] 响应状态码: ${response.statusCode}');
+
       String buffer = '';
       await for (var chunk in response.stream.transform(utf8.decoder)) {
         buffer += chunk;
       }
 
+      debugPrint('[CozeHint] 响应体长度: ${buffer.length}');
+
       // 解析SSE响应，直接返回纯文本
-      return _parseResponse(buffer);
+      final result = _parseResponse(buffer);
+      debugPrint('[CozeHint] _parseResponse 返回: "$result"');
+      return result;
     } catch (e) {
+      debugPrint('[CozeHint] 异常: $e');
       return '';
     }
   }
@@ -587,9 +605,14 @@ class CozeHintService {
   /// 解析SSE响应，Coze流式响应格式
   /// 格式: event: xxx\ndata: {json}\n\n
   static String _parseResponse(String response) {
+    debugPrint('[CozeHint] _parseResponse 原始响应长度: ${response.length}');
+    debugPrint('[CozeHint] _parseResponse 前500字符: ${response.substring(0, response.length > 500 ? 500 : response.length)}');
+
     try {
       // 按事件分割，每个事件格式为: event: xxx\ndata: {json}\n\n
       final eventBlocks = response.split('\n\n');
+      debugPrint('[CozeHint] 事件块数量: ${eventBlocks.length}');
+
       for (final block in eventBlocks) {
         if (block.isEmpty) continue;
 
@@ -600,6 +623,7 @@ class CozeHintService {
         for (final line in lines) {
           if (line.startsWith('event:')) {
             eventName = line.substring(5).trim();
+            debugPrint('[CozeHint] 发现事件: $eventName');
           } else if (line.startsWith('data:')) {
             jsonStr = line.substring(5).trim();
           }
@@ -607,23 +631,35 @@ class CozeHintService {
 
         // 检查是否是消息完成事件
         if (eventName == 'conversation.message.completed' && jsonStr != null && jsonStr.isNotEmpty) {
+          debugPrint('[CozeHint] 找到 conversation.message.completed 事件');
           final data = jsonDecode(jsonStr);
+          debugPrint('[CozeHint] data.keys: ${data.keys.toList()}');
+          debugPrint('[CozeHint] data[content]: ${data['content']}');
+
           // content 字段可能是字符串，也可能是对象数组
           if (data['content'] != null) {
             final content = data['content'];
             if (content is String) {
-              return content.trim();
+              final result = content.trim();
+              debugPrint('[CozeHint] 返回字符串内容: $result');
+              return result;
             } else if (content is List && content.isNotEmpty) {
+              debugPrint('[CozeHint] content 是数组，长度: ${content.length}');
               // 如果是数组，取第一个元素的 text 字段
               final firstItem = content[0];
               if (firstItem is Map && firstItem['text'] != null) {
-                return firstItem['text'].toString().trim();
+                final result = firstItem['text'].toString().trim();
+                debugPrint('[CozeHint] 返回数组第一个元素的text: $result');
+                return result;
               }
             }
           }
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[CozeHint] _parseResponse 异常: $e');
+    }
+    debugPrint('[CozeHint] _parseResponse 返回空字符串');
     return '';
   }
 
@@ -1401,7 +1437,13 @@ class AIDialogCtrl extends GetxController {
   }
 
   Future<void> _generateHint() async {
-    if (_speakerTexts.isEmpty) return;
+    debugPrint('[AIDialog] _generateHint 被调用');
+    debugPrint('[AIDialog] _speakerTexts 大小: ${_speakerTexts.length}');
+
+    if (_speakerTexts.isEmpty) {
+      debugPrint('[AIDialog] _speakerTexts 为空，直接返回');
+      return;
+    }
 
     // 构建对话上下文（ASR只区分不同说话人如A、B、C，不区分疗愈师/来访者）
     final conversation = _speakerTexts.entries.map((e) {
@@ -1409,18 +1451,28 @@ class AIDialogCtrl extends GetxController {
       return '【$label说】：${e.value}';
     }).join('\n');
 
+    debugPrint('[AIDialog] 原始对话长度: ${conversation.length}');
+
     // 文本字数限制：超过500字时只取最新500字
     final truncated = conversation.length > 500
         ? conversation.substring(conversation.length - 500)
         : conversation;
 
+    debugPrint('[AIDialog] 截断后对话长度: ${truncated.length}');
+    debugPrint('[AIDialog] 截断后对话内容: ${truncated.substring(0, truncated.length > 200 ? 200 : truncated.length)}...');
+
     // 调用Coze生成提示问题（Bot内部已做去重）
+    debugPrint('[AIDialog] 开始调用 CozeHintService.generateHint...');
     final question = await CozeHintService.generateHint(
       conversation: truncated,
     );
+    debugPrint('[AIDialog] CozeHintService 返回: "$question"');
 
     if (question.isNotEmpty) {
+      debugPrint('[AIDialog] 添加提示问题');
       _addHint(question);
+    } else {
+      debugPrint('[AIDialog] 提示问题为空，未添加');
     }
   }
 
