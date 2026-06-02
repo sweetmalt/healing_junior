@@ -228,7 +228,6 @@ class VolcASRService {
 
   /// 处理音频错误，尝试自动恢复
   void _handleAudioError(String error) {
-    debugPrint('[VolcASR] $error');
     _cleanup();
     if (_isRecording) _attemptRecovery();
   }
@@ -240,7 +239,6 @@ class VolcASRService {
 
     while (retryCount < maxRetries && _isRecording) {
       retryCount++;
-      debugPrint('[VolcASR] Recovery attempt $retryCount/$maxRetries');
 
       try {
         await Future.delayed(Duration(milliseconds: 500 * retryCount));
@@ -267,13 +265,10 @@ class VolcASRService {
             cancelOnError: false,
           );
 
-          debugPrint('[VolcASR] Recovery successful');
           onRecovery?.call();
           return;
         }
-      } catch (e) {
-        debugPrint('[VolcASR] Recovery failed: $e');
-      }
+      } catch (_) {}
     }
 
     if (_isRecording) {
@@ -341,12 +336,10 @@ class VolcASRService {
     _wsSubscription = _ws!.listen(
       (message) => _handleMessage(message),
       onError: (e) {
-        debugPrint('[VolcASR] WebSocket error: $e');
         _cleanup();
         if (_isRecording) _attemptRecovery();
       },
       onDone: () {
-        debugPrint('[VolcASR] WebSocket closed');
         _cleanup();
         if (_isRecording) onDisconnected?.call();
       },
@@ -381,9 +374,7 @@ class VolcASRService {
         );
         return true;
       }
-    } catch (e) {
-      debugPrint('[VolcASR] Manual reconnect failed: $e');
-    }
+    } catch (_) {}
     return false;
   }
 
