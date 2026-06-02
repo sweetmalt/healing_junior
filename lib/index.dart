@@ -589,8 +589,6 @@ class CozeHintService {
       // 解析SSE响应，直接返回纯文本
       return _parseResponse(buffer);
     } catch (e) {
-      // ignore: avoid_print
-      print('[CozeHint] Error: $e');
       return '';
     }
   }
@@ -613,10 +611,7 @@ class CozeHintService {
           }
         }
       }
-    } catch (e) {
-      // ignore: avoid_print
-      print('[CozeHint] Parse error: $e');
-    }
+    } catch (_) {}
     return '';
   }
 
@@ -629,8 +624,6 @@ class CozeHintService {
       final token = await employeeCtrl.pay(0.1);
       return token;
     } catch (e) {
-      // ignore: avoid_print
-      print('[CozeHint] Token error: $e');
       return '';
     }
   }
@@ -704,8 +697,6 @@ class CozeReportService {
       // 解析SSE响应，直接返回Markdown内容
       return _parseResponse(buffer);
     } catch (e) {
-      // ignore: avoid_print
-      print('[CozeReport] Error: $e');
       return '';
     }
   }
@@ -742,10 +733,7 @@ $dialogContent''';
           }
         }
       }
-    } catch (e) {
-      // ignore: avoid_print
-      print('[CozeReport] Parse error: $e');
-    }
+    } catch (_) {}
     return '';
   }
 
@@ -758,8 +746,6 @@ $dialogContent''';
       final token = await employeeCtrl.pay(1);
       return token;
     } catch (e) {
-      // ignore: avoid_print
-      print('[CozeReport] Token error: $e');
       return '';
     }
   }
@@ -997,41 +983,6 @@ class AIDialogCtrl extends GetxController {
 
     // 判断是否显示"生成报告"按钮（文本超过500字）
     _showReportButton = currentFullText.value.length > 500;
-
-    // 保存会话数据
-    _saveSessionData();
-  }
-
-  /// 保存会话数据（原始 + 处理后）
-  void _saveSessionData() {
-    if (currentFullText.value.isEmpty) return;
-
-    final sessionData = {
-      'timestamp': DateTime.now().toIso8601String(),
-      'rawText': currentFullText.value,
-      'speakerInfo': _speakerInfos.map((key, info) => MapEntry(
-            key.toString(),
-            {
-              'label': info.label,
-              'role': info.inferredRole.name,
-              'questionCount': info.questionCount,
-              'answerCount': info.answerCount,
-            },
-          )),
-      'dialogs': processedDialogs
-          .map((d) => {
-                'speakerLabel': d.speakerLabel,
-                'role': d.role?.name ?? 'unknown',
-                'text': d.text,
-                'isHint': d.isHint,
-              })
-          .toList(),
-    };
-
-    // 这里只是打印，实际应该持久化
-    final jsonStr = jsonEncode(sessionData);
-    // ignore: avoid_print
-    print('[AIDialog] 会话数据已保存，长度: ${jsonStr.length}');
   }
 
   // ==================== 报告相关方法 ====================
@@ -1077,10 +1028,7 @@ class AIDialogCtrl extends GetxController {
       // 按时间倒序排列，最新的在最前面
       reports.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       reportList.assignAll(reports);
-    } catch (e) {
-      // ignore: avoid_print
-      print('[AIDialog] 加载报告列表失败: $e');
-    }
+    } catch (_) {}
   }
 
   /// 生成并保存报告
@@ -1136,8 +1084,6 @@ class AIDialogCtrl extends GetxController {
       isGeneratingReport.value = false;
       return true;
     } catch (e) {
-      // ignore: avoid_print
-      print('[AIDialog] 生成报告失败: $e');
       isGeneratingReport.value = false;
       return false;
     }
@@ -1152,10 +1098,7 @@ class AIDialogCtrl extends GetxController {
       final fileName = 'card_oh_report_$dateStr.md';
       final file = File('${dir.path}/$fileName');
       await file.writeAsString(markdown);
-    } catch (e) {
-      // ignore: avoid_print
-      print('[AIDialog] 保存报告失败: $e');
-    }
+    } catch (_) {}
   }
 
   /// 读取报告内容
@@ -1166,10 +1109,7 @@ class AIDialogCtrl extends GetxController {
       if (await file.exists()) {
         return await file.readAsString();
       }
-    } catch (e) {
-      // ignore: avoid_print
-      print('[AIDialog] 读取报告失败: $e');
-    }
+    } catch (_) {}
     return '';
   }
 
@@ -1197,11 +1137,8 @@ class AIDialogCtrl extends GetxController {
       await pdfFile.writeAsBytes(await pdf.save());
       
       // ignore: avoid_print
-      print('[AIDialog] PDF已生成: ${pdfFile.path}');
       return pdfFile;
     } catch (e) {
-      // ignore: avoid_print
-      print('[AIDialog] 生成PDF失败: $e');
       return null;
     }
   }
@@ -1233,8 +1170,6 @@ class AIDialogCtrl extends GetxController {
         );
       }
     } catch (e) {
-      // ignore: avoid_print
-      print('[AIDialog] 分享失败: $e');
       Get.snackbar('分享失败', '无法分享报告');
     }
   }
@@ -1712,7 +1647,7 @@ class _AIDialogContent extends StatelessWidget {
                 Text('提示问题', style: TextStyle(fontSize: 13, color: Colors.grey[700], fontWeight: FontWeight.w500)),
                 const Spacer(),
                 Text(
-                  '$hintList.length条',
+                  '${hintList.length}条',
                   style: TextStyle(fontSize: 11, color: Colors.grey[500]),
                 ),
               ],
