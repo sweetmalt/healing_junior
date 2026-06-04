@@ -2,197 +2,360 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+/// ============================================================
 /// 阶段枚举
-enum CardohPhase { select, shuffling, fan, revealed }
-
-/// 已抽卡牌数据结构
-class DrawnCard {
-  final int id;
-  final bool isReversed;
-  DrawnCard({required this.id, required this.isReversed});
+/// ============================================================
+enum CardohPhase {
+  select,    // 选择卡组
+  shuffling, // 洗牌动画
+  fan,       // 扇形浏览/抽卡
+  viewing,   // 查看已抽卡
 }
 
+/// ============================================================
 /// 控制器
-class CardohCtrl extends GetxController with GetTickerProviderStateMixin {
-  // ==================== 状态 ====================
-  final phase = CardohPhase.select.obs;
-  final selectedDeck = Rxn<int>(); // null / 1 / 2
-  final includeSpecial = true.obs; // 是否包含39/40/41特殊卡（仅复原卡有效）
-  final allCards = <int>[].obs;
-  final remainingCards = <int>[].obs;
-  final drawnCards = <DrawnCard>[].obs;
-  final currentPage = 0.obs;
-  final drawnCard = Rxn<int>();
-  final isReversed = false.obs;
-  final isFlipped = false.obs;
-  final cardFlyProgress = 0.0.obs; // 0.0~1.0 飞入动画进度
-  final cardFlipProgress = 0.0.obs; // 0.0~1.0 翻转动画进度
-  final showShuffleDone = false.obs; // 洗牌完成标记
-
-  // ==================== 动画控制器 ====================
-  AnimationController? _shuffleAnimCtrl;
-  AnimationController? _flyAnimCtrl;
-  AnimationController? _flipAnimCtrl;
-
-  // 洗牌动画用的随机序列
-  List<int> _shuffleSequence = [];
-
-  // 扇形参数
-  static const double fanAngle = 120.0; // 扇形总角度
-  static const int visibleCards = 11; // 可见卡片数量
-
-  // 选中卡在扇形中的位置（用于飞入动画起始位置计算）
-  Offset? selectedCardOffset;
-
-  // 洗牌动画步骤（暴露给widget）- 响应式
-  final shuffleStep = 0.obs;
-
+/// ============================================================
+class CardohCtrl extends GetxController {
   @override
-  void onClose() {
-    _shuffleAnimCtrl?.dispose();
-    _flyAnimCtrl?.dispose();
-    _flipAnimCtrl?.dispose();
-    super.onClose();
+  void onInit() {
+    super.onInit();
+    // 首次进入默认选择基础卡
+    selectedDeck.value = 1;
+    // 初始化基础卡数据
+    selectDeck(1);
   }
 
-  // ==================== 动作 ====================
+  // ==================== 统一数据结构 ====================
 
-  /// 选择卡组
+  /// 当前显示的卡列表（可以是1-4张卡）
+  final currentCards = <int>[].obs;
+
+  /// 选中的卡的索引（null = 显示全部缩略图网格）
+  final selectedCardIndex = Rxn<int>();
+
+  /// 所有已抽卡的记录（每条是一组卡ID）
+  final drawnCardSets = <List<int>>[].obs;
+
+  /// 扇形显示用的完整卡列表
+  final fanDisplayCards = <int>[].obs;
+
+  /// 剩余可抽的卡列表
+  final remainingCards = <int>[].obs;
+
+  /// 飞行起点位置列表（每张卡一个起点）
+  final flyStartPositions = <Offset>[].obs;
+
+  /// 当前阶段
+  final phase = CardohPhase.select.obs;
+
+  /// 是否包含39/40/41特殊卡（仅基础卡有效，默认false）
+  final includeSpecial = false.obs;
+
+  /// 当前选中的卡组（1=基础卡, 2=复原卡）
+  final selectedDeck = Rxn<int>();
+
+  /// 飞行动画进度 0.0~1.0
+  final flyProgress = 0.0.obs;
+
+  /// 是否正在飞行
+  final isFlying = false.obs;
+
+  // ==================== 环形/扇形动画参数 ====================
+
+  /// 圆环缩放比例（1.0=初始，1.0=放大后）
+  final circleScale = 1.0.obs;
+
+  /// 圆环垂直偏移（0=初始，向上为负，向下为正）
+  final circleOffsetY = 0.0.obs;
+
+  /// 圆环旋转角度（弧度），用于滑动控制
+  final circleRotation = 0.0.obs;
+
+  /// 散开动画进度（0.0~1.0）
+  final shuffleProgress = 0.0.obs;
+
+  /// 移动动画进度（0.0~1.0）
+  final moveProgress = 0.0.obs;
+
+  /// 圆环初始半径
+  static const double circleRadius = 240.0;
+
+  /// 放大后的圆环半径
+  static const double expandedCircleRadius = 400.0;
+
+  /// 圆环最终位置：顶端距屏幕底线240px
+  /// 圆心Y = 屏幕高度 - 240 + 400 = 屏幕高度 + 160
+  double get finalCircleCenterY => Get.height - 240 + expandedCircleRadius;
+
+  /// 圆环初始中心Y（屏幕正中央）
+  double get initialCircleCenterY => Get.height / 2;
+
+  /// 是否保存了环形状态
+  final hasSavedCircleState = false.obs;
+
+  /// 保存的环形状态
+  double savedScale = circleRadius;
+  double savedOffsetY = 0;
+  double savedCardW = cardW0;
+  double savedCardH = cardH0;
+
+  /// 保存环形牌阵的最终状态
+  void saveCircleState({
+    required double scale,
+    required double offsetY,
+    required double cardW,
+    required double cardH,
+  }) {
+    savedScale = scale;
+    savedOffsetY = offsetY;
+    savedCardW = cardW;
+    savedCardH = cardH;
+    hasSavedCircleState.value = true;
+  }
+
+  /// 卡牌初始尺寸
+  static const double cardW0 = 60.0;
+  static const double cardH0 = 80.0;
+
+  /// 卡牌最终尺寸
+  static const double cardW1 = 120.0;
+  static const double cardH1 = 160.0;
+
+  // ==================== 常量 ====================
+
+  /// 扇形总角度（度）
+  static const double fanAngle = 120.0;
+
+  /// 可见卡片数量
+  static const int visibleCards = 11;
+
+  /// 圆环放大系数
+  static const double circleExpandScale = 1.5;
+
+  /// 卡牌尺寸
+  static const double thumbW = 60.0;   // 缩略图宽度
+  static const double thumbH = 80.0;   // 缩略图高度
+  static const double fanCardW = 120.0; // 扇形卡宽度
+  static const double fanCardH = 160.0; // 扇形卡高度
+  static const double maxCardW = 300.0; // 放大最大宽度
+  static const double maxCardH = 400.0; // 放大最大高度
+
+  // ==================== 卡组数据 ====================
+
+  /// 基础卡总数
+  static const int baseDeckCount = 88;
+
+  /// 复原卡总数
+  static const int recoveryDeckCount = 99;
+
+  /// 特殊卡ID
+  static const List<int> specialCardIds = [39, 40, 41];
+
+  // ==================== 方法 ====================
+
+  /// 选择卡组（仅选择，不开始洗牌）
   void selectDeck(int deck) {
     selectedDeck.value = deck;
+    int totalCards = deck == 1 ? baseDeckCount : recoveryDeckCount;
+    includeSpecial.value = false; // 默认不包含特殊卡
+
     // 初始化卡牌列表
-    final maxCards = deck == 1 ? 88 : 99;
-    allCards.value = List.generate(maxCards, (i) => i + 1);
-    // 复原卡且不包含特殊卡时，过滤掉39/40/41
-    if (deck == 2 && !includeSpecial.value) {
-      allCards.value = allCards.where((id) => ![39, 40, 41].contains(id)).toList();
+    fanDisplayCards.value = List.generate(totalCards, (i) => i + 1);
+
+    // 基础卡默认不包含39/40/41
+    if (deck == 1) {
+      fanDisplayCards.value = fanDisplayCards.where((id) => !specialCardIds.contains(id)).toList();
     }
-    remainingCards.value = List.from(allCards);
-    drawnCards.clear();
-    currentPage.value = 0;
-    drawnCard.value = null;
-    isReversed.value = false;
-    isFlipped.value = false;
-    cardFlyProgress.value = 0.0;
-    cardFlipProgress.value = 0.0;
-    phase.value = CardohPhase.shuffling;
-    _startShuffle();
+
+    remainingCards.value = List.from(fanDisplayCards);
+    drawnCardSets.clear();
+    currentCards.clear();
+    selectedCardIndex.value = null;
+    flyStartPositions.clear();
+
+    // 注意：这里不设置 phase，让用户看到整齐堆叠的卡牌
+    // 点击工具栏洗牌按钮才会开始洗牌
   }
 
   /// 开始洗牌动画
-  void _startShuffle() {
-    _shuffleSequence = List.generate(remainingCards.length, (i) => i);
-    _shuffleSequence.shuffle(Random());
-    shuffleStep.value = 0;
-
-    _shuffleAnimCtrl?.dispose();
-    _shuffleAnimCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2500),
-    );
-
-    _shuffleAnimCtrl!.addListener(_onShuffleTick);
-    _shuffleAnimCtrl!.forward().then((_) {
-      showShuffleDone.value = true;
-      Future.delayed(const Duration(milliseconds: 300), () {
-        phase.value = CardohPhase.fan;
-        showShuffleDone.value = false;
-      });
-    });
-  }
-
-  void _onShuffleTick() {
-    // 每帧更新洗牌步骤
-    final progress = _shuffleAnimCtrl!.value;
-    shuffleStep.value = (progress * _shuffleSequence.length * 2).toInt();
-    remainingCards.refresh();
-  }
-
-  /// 点击卡片抽卡
-  void drawCard(int cardId) {
-    if (phase.value != CardohPhase.fan) return;
-    if (remainingCards.length <= 1) return; // 最后一张不需要再抽
-
-    // 决定正逆位
-    isReversed.value = Random().nextBool();
-    drawnCard.value = cardId;
-    remainingCards.remove(cardId);
-    drawnCards.add(DrawnCard(id: cardId, isReversed: isReversed.value));
-    currentPage.value = 0; // 重置到第一页
-
-    phase.value = CardohPhase.revealed;
-    isFlipped.value = false;
-    cardFlyProgress.value = 0.0;
-    cardFlipProgress.value = 0.0;
-
-    // 启动飞入动画
-    _startFlyAnimation();
-  }
-
-  void _startFlyAnimation() {
-    _flyAnimCtrl?.dispose();
-    _flyAnimCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    );
-
-    _flyAnimCtrl!.addListener(() {
-      cardFlyProgress.value = _flyAnimCtrl!.value;
-    });
-
-    _flyAnimCtrl!.forward().then((_) {
-      // 飞入完成后开始翻转
-      Future.delayed(const Duration(milliseconds: 200), _startFlipAnimation);
-    });
-  }
-
-  void _startFlipAnimation() {
-    _flipAnimCtrl?.dispose();
-    _flipAnimCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1000),
-    );
-
-    _flipAnimCtrl!.addListener(() {
-      cardFlipProgress.value = _flipAnimCtrl!.value;
-    });
-
-    _flipAnimCtrl!.forward().then((_) {
-      isFlipped.value = true;
-    });
-  }
-
-  /// 返回扇形页
-  void backToFan() {
-    if (remainingCards.isEmpty) {
-      // 最后一张抽完，关闭
-      _showEndDialog();
+  void startShuffle() {
+    if (selectedDeck.value == null) {
+      // 如果没有选择卡组，弹出选择对话框
+      switchDeck();
       return;
     }
-    phase.value = CardohPhase.fan;
-    drawnCard.value = null;
-    isFlipped.value = false;
-    cardFlyProgress.value = 0.0;
-    cardFlipProgress.value = 0.0;
+    phase.value = CardohPhase.shuffling;
   }
 
-  void _showEndDialog() {
+  /// 洗牌完成，进入扇形
+  void onShuffleComplete() {
+    phase.value = CardohPhase.fan;
+  }
+
+  /// 点击扇形中的卡
+  void onFanCardTap(int cardId, Offset cardCenter) {
+    if (phase.value != CardohPhase.fan || isFlying.value) return;
+    if (remainingCards.isEmpty) return;
+
+    // 记录飞行起点（不立即移除卡牌，等飞行完成后再移除）
+    flyStartPositions.clear();
+    flyStartPositions.add(cardCenter);
+
+    // 设置当前卡（用于飞行动画显示）
+    currentCards.value = [cardId];
+
+    // 标记飞行状态
+    isFlying.value = true;
+    flyProgress.value = 0.0;
+  }
+
+  /// 飞行动画完成
+  void onFlyComplete() {
+    // 从剩余卡中移除飞出去的卡
+    if (currentCards.isNotEmpty) {
+      remainingCards.remove(currentCards.first);
+    }
+
+    isFlying.value = false;
+    flyProgress.value = 0.0;
+
+    // 添加到已抽卡记录
+    drawnCardSets.add(List.from(currentCards));
+
+    // 进入查看模式
+    phase.value = CardohPhase.viewing;
+    selectedCardIndex.value = 0;
+  }
+
+  /// 四卡连抽
+  void drawFourCards(List<Offset> cardCenters) {
+    if (phase.value != CardohPhase.fan || isFlying.value) return;
+    if (remainingCards.length < 4) return;
+
+    // 随机选4张
+    final random = Random();
+    final selected = <int>[];
+    final remainingCopy = List<int>.from(remainingCards);
+
+    for (int i = 0; i < 4; i++) {
+      final idx = random.nextInt(remainingCopy.length);
+      selected.add(remainingCopy.removeAt(idx));
+    }
+
+    // 记录飞行起点
+    flyStartPositions.value = cardCenters.take(4).toList();
+
+    // 更新剩余卡
+    remainingCards.value = remainingCopy;
+
+    // 设置当前卡
+    currentCards.value = selected;
+
+    // 标记飞行状态
+    isFlying.value = true;
+    flyProgress.value = 0.0;
+  }
+
+  /// 四卡飞行完成
+  void onFourFlyComplete() {
+    isFlying.value = false;
+    flyProgress.value = 0.0;
+
+    // 添加到已抽卡记录
+    drawnCardSets.add(List.from(currentCards));
+
+    // 进入查看模式
+    phase.value = CardohPhase.viewing;
+    selectedCardIndex.value = null; // 显示全部
+  }
+
+  /// 点击查看已抽卡组
+  void viewDrawnSet(int setIndex) {
+    if (setIndex < 0 || setIndex >= drawnCardSets.length) return;
+
+    final cards = drawnCardSets[setIndex];
+    currentCards.value = List.from(cards);
+
+    if (cards.length == 1) {
+      selectedCardIndex.value = 0;
+    } else {
+      selectedCardIndex.value = null; // 多卡显示全部
+    }
+
+    phase.value = CardohPhase.viewing;
+  }
+
+  /// 选择某张卡（查看模式下）
+  void selectCard(int index) {
+    if (index < 0 || index >= currentCards.length) return;
+    selectedCardIndex.value = index;
+  }
+
+  /// 清除选择
+  void clearSelection() {
+    selectedCardIndex.value = null;
+  }
+
+  /// 返回扇形
+  void backToFan() {
+    currentCards.clear();
+    selectedCardIndex.value = null;
+    flyStartPositions.clear();
+    phase.value = CardohPhase.fan;
+  }
+
+  /// 重新开始
+  void resetAll() {
+    phase.value = CardohPhase.select;
+    selectedDeck.value = null;
+    fanDisplayCards.clear();
+    remainingCards.clear();
+    drawnCardSets.clear();
+    currentCards.clear();
+    selectedCardIndex.value = null;
+    flyStartPositions.clear();
+    isFlying.value = false;
+    flyProgress.value = 0.0;
+  }
+
+  /// 打开设置对话框
+  void showSettingsDialog() {
+    if (selectedDeck.value == null) return;
+
     Get.dialog(
       AlertDialog(
         backgroundColor: const Color(0xFF2A2A4E),
-        title: const Text('恭喜完成', style: TextStyle(color: Colors.white)),
-        content: Text(
-          '已抽取全部 ${drawnCards.length} 张卡牌',
-          style: const TextStyle(color: Colors.white70),
+        title: const Text('设置', style: TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (selectedDeck.value == 1) ...[
+              const Text(
+                '基础卡设置',
+                style: TextStyle(color: Colors.white70, fontSize: 14),
+              ),
+              const SizedBox(height: 12),
+              Obx(() => SwitchListTile(
+                    title: const Text(
+                      '包含 39/40/41 特殊卡',
+                      style: TextStyle(color: Colors.white, fontSize: 14),
+                    ),
+                    value: includeSpecial.value,
+                    onChanged: (v) {
+                      includeSpecial.value = v;
+                      _rebuildCards();
+                    },
+                    activeTrackColor: Colors.amber,
+                  )),
+            ] else ...[
+              const Text(
+                '复原卡设置',
+                style: TextStyle(color: Colors.white70, fontSize: 14),
+              ),
+            ],
+          ],
         ),
         actions: [
-          TextButton(
-            onPressed: () {
-              Get.back();
-              resetAll();
-            },
-            child: const Text('重新开始'),
-          ),
           TextButton(
             onPressed: () => Get.back(),
             child: const Text('关闭'),
@@ -202,36 +365,60 @@ class CardohCtrl extends GetxController with GetTickerProviderStateMixin {
     );
   }
 
-  /// 重新开始
-  void resetAll() {
-    phase.value = CardohPhase.select;
-    selectedDeck.value = null;
-    allCards.clear();
-    remainingCards.clear();
-    drawnCards.clear();
-    currentPage.value = 0;
-    drawnCard.value = null;
-    isReversed.value = false;
-    isFlipped.value = false;
+  /// 重建卡组（当设置改变时）
+  void _rebuildCards() {
+    if (selectedDeck.value == null) return;
+
+    int totalCards = selectedDeck.value == 1 ? baseDeckCount : recoveryDeckCount;
+
+    // 重新生成卡组
+    final allCards = List.generate(totalCards, (i) => i + 1);
+
+    if (selectedDeck.value == 1 && !includeSpecial.value) {
+      allCards.removeWhere((id) => specialCardIds.contains(id));
+    }
+
+    fanDisplayCards.value = allCards;
+
+    // 重建剩余卡（保留未抽的）
+    final drawnIds = drawnCardSets.expand((s) => s).toSet();
+    remainingCards.value = allCards.where((id) => !drawnIds.contains(id)).toList();
   }
 
-  /// 查看已抽卡大图
-  void viewDrawnCard(DrawnCard card) {
+  /// 切换卡组
+  void switchDeck() {
     Get.dialog(
-      Stack(
-        children: [
-          GestureDetector(
-            onTap: () => Get.back(),
-            child: Container(color: Colors.black54),
-          ),
-          Center(
-            child: _buildFlipCard(
-              card.id,
-              card.isReversed,
-              true, // 直接显示正面
-              1.0,
-              1.0,
+      AlertDialog(
+        backgroundColor: const Color(0xFF2A2A4E),
+        title: const Text('选择卡组', style: TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _DeckOption(
+              title: '基础卡',
+              subtitle: '共 ${baseDeckCount - specialCardIds.length} 张（不含特殊卡）',
+              selected: selectedDeck.value == 1,
+              onTap: () {
+                Get.back();
+                selectDeck(1);
+              },
             ),
+            const SizedBox(height: 12),
+            _DeckOption(
+              title: '复原卡',
+              subtitle: '共 $recoveryDeckCount 张',
+              selected: selectedDeck.value == 2,
+              onTap: () {
+                Get.back();
+                selectDeck(2);
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(),
+            child: const Text('取消'),
           ),
         ],
       ),
@@ -250,151 +437,1135 @@ class CardohCtrl extends GetxController with GetTickerProviderStateMixin {
       snackPosition: SnackPosition.TOP,
     );
   }
+}
 
-  /// 构建翻转卡片widget
-  Widget _buildFlipCard(int cardId, bool reversed, bool showFront, double flyProgress, double flipProgress) {
-    final screenW = Get.width;
-    final cardW = screenW * 0.8;
-    final cardH = cardW * 4 / 3;
+/// 卡组选项
+class _DeckOption extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
 
-    // 计算飞入位置：从扇形位置飞到中央
-    final startOffset = selectedCardOffset ?? Offset(screenW / 2, Get.height * 0.6);
-    final endOffset = Offset(screenW / 2, Get.height * 0.35);
+  const _DeckOption({
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
 
-    // flyProgress 控制位置
-    final currentOffset = Offset.lerp(startOffset, endOffset, Curves.easeInOut.transform(flyProgress))!;
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: selected ? Colors.amber.withValues(alpha: 0.2) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? Colors.amber : Colors.white24,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              selected ? Icons.check_circle : Icons.circle_outlined,
+              color: selected ? Colors.amber : Colors.white38,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
-    // 翻转角度
-    final flipAngle = flipProgress * pi;
+/// ============================================================
+/// 主视图
+/// ============================================================
+class CardohView extends StatelessWidget {
+  const CardohView({super.key});
 
-    return Positioned(
-      left: currentOffset.dx - cardW / 2,
-      top: currentOffset.dy - cardH / 2,
-      child: Transform(
-        alignment: Alignment.center,
-        transform: Matrix4.identity()
-          ..setEntry(3, 2, 0.001)
-          ..rotateY(flipAngle),
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 50),
-          child: flipAngle < pi / 2
-              ? _buildCardBack(cardW, cardH)
-              : Transform(
-                  alignment: Alignment.center,
-                  transform: Matrix4.identity()..rotateY(pi),
-                  child: _buildCardFront(cardId, reversed, cardW, cardH),
-                ),
+  @override
+  Widget build(BuildContext context) {
+    final controller = Get.put(CardohCtrl());
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFE0F7FA),
+      body: SafeArea(
+        child: Stack(
+          children: [
+            // 主内容
+            Obx(() => _buildContent(controller)),
+            // 右侧工具条
+            Positioned(
+              right: 16,
+              top: 100,
+              bottom: 200,
+              child: _FloatingToolbar(controller: controller),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildCardBack(double w, double h) {
+  Widget _buildContent(CardohCtrl controller) {
+    switch (controller.phase.value) {
+      case CardohPhase.select:
+        // 首次进入或重置后：显示整齐堆叠的卡牌
+        return _StackedCardsView(controller: controller);
+      case CardohPhase.shuffling:
+        return _ShufflePage(controller: controller);
+      case CardohPhase.fan:
+      case CardohPhase.viewing:
+        return _MainContent(controller: controller);
+    }
+  }
+}
+
+/// ============================================================
+/// 整齐堆叠的卡牌视图（初始状态）
+/// ============================================================
+class _StackedCardsView extends StatelessWidget {
+  final CardohCtrl controller;
+
+  const _StackedCardsView({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // 显示整齐堆叠的卡牌（可点击）
+          Obx(() => GestureDetector(
+            onTap: controller.selectedDeck.value != null
+                ? () => controller.startShuffle()
+                : null,
+            child: _buildStackedDeck(),
+          )),
+          const SizedBox(height: 32),
+          // 提示文字
+          Obx(() {
+            if (controller.selectedDeck.value == null) {
+              return const Text(
+                '请点击右侧工具栏选择卡组',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.black45,
+                ),
+              );
+            }
+            return const Text(
+              '点击卡牌堆开始洗牌',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.black45,
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStackedDeck() {
+    if (controller.selectedDeck.value == null) {
+      // 没有选择卡组时，显示默认的堆叠效果
+      return _buildCardStack(null, 12);
+    }
+    // 根据选择的卡组显示对应数量的堆叠
+    final deckType = controller.selectedDeck.value!;
+    final cardCount = controller.fanDisplayCards.isEmpty
+        ? 12  // 首次进入时显示默认堆叠
+        : (controller.fanDisplayCards.length > 20 ? 20 : controller.fanDisplayCards.length);
+    return _buildCardStack(deckType, cardCount);
+  }
+
+  Widget _buildCardStack(int? deckType, int count) {
+    // 整齐堆叠的卡牌效果，尺寸 60x80
+    return SizedBox(
+      width: 60,
+      height: 80,
+      child: Stack(
+        children: List.generate(count.clamp(0, 12), (index) {
+          // 越在下面的卡偏移越小，创造整齐堆叠效果
+          final offset = index * 0.3;
+          return Positioned(
+            left: offset,
+            top: offset,
+            child: Container(
+              width: 60 - offset,
+              height: 80 - offset * 1.2,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(4),
+                color: deckType == null
+                    ? const Color(0xFF3A3462)
+                    : const Color(0xFF4DB6AC),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 2,
+                    offset: Offset(1 - offset * 0.1, 2 - offset * 0.15),
+                  ),
+                ],
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.3),
+                  width: 0.5,
+                ),
+              ),
+              child: deckType == null
+                  ? null
+                  : ClipRRect(
+                      borderRadius: BorderRadius.circular(3.5),
+                      child: Image.asset(
+                        'assets/images/card_oh/$deckType/back.jpg',
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const SizedBox(),
+                      ),
+                    ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+}
+
+/// ============================================================
+/// 洗牌动画页面
+/// ============================================================
+class _ShufflePage extends StatefulWidget {
+  final CardohCtrl controller;
+
+  const _ShufflePage({required this.controller});
+
+  @override
+  State<_ShufflePage> createState() => _ShufflePageState();
+}
+
+class _ShufflePageState extends State<_ShufflePage>
+    with TickerProviderStateMixin {
+  late AnimationController _shuffleCtrl;   // 洗牌散开动画
+  late AnimationController _moveCtrl;     // 环形移动动画（3秒）
+  late Animation<double> _scaleAnim;      // 放大动画
+  late Animation<double> _offsetYAnim;    // 下移动画
+  late Animation<double> _cardWAnim;      // 卡牌宽度动画
+  late Animation<double> _cardHAnim;      // 卡牌高度动画
+
+  late List<_CardTarget> _cardTargets;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _generateCardTargets();
+
+    // 洗牌散开动画：每张卡0.1秒，总时长 = 卡数 * 0.1秒
+    final totalCards = widget.controller.fanDisplayCards.length;
+    final shuffleDurationMs = (totalCards * 0.1 * 1000).toInt();
+    _shuffleCtrl = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: shuffleDurationMs),
+    );
+
+    // 环形移动动画：3秒
+    _moveCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3000),
+    );
+
+    // 放大动画：半径从240到400，即400/240=1.667
+    _scaleAnim = Tween<double>(
+      begin: CardohCtrl.circleRadius,
+      end: CardohCtrl.expandedCircleRadius,
+    ).animate(CurvedAnimation(parent: _moveCtrl, curve: Curves.easeInOut));
+
+    // 下移动画：从屏幕中央到最终位置
+    _offsetYAnim = Tween<double>(
+      begin: widget.controller.initialCircleCenterY,
+      end: widget.controller.finalCircleCenterY,
+    ).animate(CurvedAnimation(parent: _moveCtrl, curve: Curves.easeInOut));
+
+    // 卡牌宽度动画：60 -> 120
+    _cardWAnim = Tween<double>(
+      begin: CardohCtrl.cardW0,
+      end: CardohCtrl.cardW1,
+    ).animate(CurvedAnimation(parent: _moveCtrl, curve: Curves.easeInOut));
+
+    // 卡牌高度动画：80 -> 160
+    _cardHAnim = Tween<double>(
+      begin: CardohCtrl.cardH0,
+      end: CardohCtrl.cardH1,
+    ).animate(CurvedAnimation(parent: _moveCtrl, curve: Curves.easeInOut));
+
+    // 洗牌完成后暂停1秒，然后执行移动动画
+    _shuffleCtrl.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        Future.delayed(const Duration(seconds: 1), () {
+          if (mounted) {
+            _moveCtrl.forward();
+          }
+        });
+      }
+    });
+
+    // 移动完成后进入扇形（但保持显示环形牌阵）
+    _moveCtrl.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        if (mounted) {
+          // 将环形牌阵的最终状态保存到控制器
+          widget.controller.saveCircleState(
+            scale: _scaleAnim.value,
+            offsetY: _offsetYAnim.value,
+            cardW: _cardWAnim.value,
+            cardH: _cardHAnim.value,
+          );
+          // 进入扇形阶段（但继续显示环形）
+          widget.controller.phase.value = CardohPhase.fan;
+        }
+      }
+    });
+
+    _shuffleCtrl.forward();
+  }
+
+  void _generateCardTargets() {
+    final totalCards = widget.controller.fanDisplayCards.length;
+    final random = Random();
+
+    // 生成所有卡牌的目标角度（均匀分布在圆周上）
+    // 角度从顶部(-π/2)开始，顺时针分布
+    final targetAngles = List.generate(
+      totalCards,
+      (i) => (2 * pi * i / totalCards) - pi / 2,
+    );
+
+    // 打乱飞行顺序（随机）
+    targetAngles.shuffle(random);
+
+    _cardTargets = List.generate(totalCards, (i) {
+      // 每张卡在环形上的目标角度（均匀分布）
+      final targetAngle = targetAngles[i];
+
+      // 飞行方向：从中心向目标点飞去
+      final flyAngle = targetAngle;
+
+      // 每张卡延迟i * 0.1秒开始飞行
+      final delay = i * 0.1;
+
+      // 最终旋转角度：卡牌指向圆心（垂直于半径方向）
+      final finalRotation = targetAngle + pi / 2;
+
+      // 初始旋转角度：0（牌堆是整齐叠放的，没有角度）
+      const initialRotation = 0.0;
+
+      return _CardTarget(
+        id: widget.controller.fanDisplayCards[i],
+        startX: 0.0,
+        startY: 0.0,
+        flyAngle: flyAngle,
+        flyDistance: CardohCtrl.circleRadius,
+        delay: delay,
+        initialRotation: initialRotation,
+        finalRotation: finalRotation,
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _shuffleCtrl.dispose();
+    _moveCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        // 洗牌动画区域
+        Center(
+          child: AnimatedBuilder(
+            animation: Listenable.merge([_shuffleCtrl, _moveCtrl]),
+            builder: (context, child) {
+              return CustomPaint(
+                size: Size(MediaQuery.of(context).size.width,
+                    MediaQuery.of(context).size.height),
+                painter: _ShufflePainter(
+                  shuffleProgress: _shuffleCtrl.value,
+                  moveProgress: _moveCtrl.value,
+                  scale: _scaleAnim.value,
+                  offsetY: _offsetYAnim.value,
+                  cardW: _cardWAnim.value,
+                  cardH: _cardHAnim.value,
+                  cardTargets: _cardTargets,
+                  centerX: MediaQuery.of(context).size.width / 2,
+                ),
+              );
+            },
+          ),
+        ),
+        // 遮罩文字
+        Center(
+          child: AnimatedBuilder(
+            animation: Listenable.merge([_shuffleCtrl, _moveCtrl]),
+            builder: (context, child) {
+              String text = '洗牌中...';
+              if (_shuffleCtrl.value >= 1.0 && _moveCtrl.value == 0) {
+                text = '即将完成...';
+              } else if (_moveCtrl.isAnimating) {
+                text = '';
+              }
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.black38,
+                  borderRadius: BorderRadius.circular(30),
+                ),
+                child: Text(
+                  text,
+                  style: const TextStyle(color: Colors.white, fontSize: 18),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 单张卡牌的目标位置数据
+class _CardTarget {
+  final int id;
+  final double startX;         // 飞行起点X（中心）
+  final double startY;         // 飞行起点Y（中心）
+  final double flyAngle;       // 飞行方向角度
+  final double flyDistance;    // 飞行距离（半径）
+  final double delay;          // 延迟开始动画的时间
+  final double initialRotation; // 初始旋转角度
+  final double finalRotation;   // 最终旋转角度（卡牌指向圆心）
+
+  _CardTarget({
+    required this.id,
+    required this.startX,
+    required this.startY,
+    required this.flyAngle,
+    required this.flyDistance,
+    required this.delay,
+    required this.initialRotation,
+    required this.finalRotation,
+  });
+}
+
+/// 洗牌动画画家
+class _ShufflePainter extends CustomPainter {
+  final double shuffleProgress;  // 散开进度 0.0~1.0
+  final double moveProgress;     // 移动进度 0.0~1.0
+  final double scale;           // 当前半径
+  final double offsetY;         // 圆心Y位置
+  final double cardW;           // 当前卡牌宽度
+  final double cardH;           // 当前卡牌高度
+  final List<_CardTarget> cardTargets;
+  final double centerX;          // 屏幕中心X
+
+  _ShufflePainter({
+    required this.shuffleProgress,
+    required this.moveProgress,
+    required this.scale,
+    required this.offsetY,
+    required this.cardW,
+    required this.cardH,
+    required this.cardTargets,
+    required this.centerX,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final total = cardTargets.length;
+
+    // 计算当前时间（秒）
+    final currentTime = shuffleProgress * total * 0.1;
+
+    for (int i = 0; i < cardTargets.length; i++) {
+      final target = cardTargets[i];
+
+      // 每张卡飞行0.1秒，依次进行
+      // 卡i在时间 t_i 到 t_i+0.1 飞行
+      final flyStartTime = i * 0.1;
+      final flyEndTime = flyStartTime + 0.1;
+
+      double cardProgress;
+      if (shuffleProgress <= 0) {
+        // 动画刚开始，所有卡都在中心
+        cardProgress = 0.0;
+      } else if (currentTime < flyStartTime) {
+        // 还没开始，停留在中心
+        cardProgress = 0.0;
+      } else if (currentTime >= flyEndTime) {
+        // 已经飞完
+        cardProgress = 1.0;
+      } else {
+        // 飞行中
+        cardProgress = (currentTime - flyStartTime) / 0.1;
+      }
+
+      final curved = Curves.easeOut.transform(cardProgress);
+
+      // 目标点在环形上的坐标
+      final targetX = cos(target.flyAngle) * scale;
+      final targetY = sin(target.flyAngle) * scale;
+
+      // 当前位置：从中心点插值到目标点
+      final currentX = centerX + targetX * curved;
+      final currentY = offsetY + targetY * curved;
+
+      // 旋转角度：从初始角度插值到最终角度
+      final currentRotation = target.initialRotation +
+          (target.finalRotation - target.initialRotation) * curved;
+
+      // 绘制卡牌（统一深色背面）
+      final rect = Rect.fromCenter(
+        center: Offset(currentX, currentY),
+        width: cardW,
+        height: cardH,
+      );
+
+      final paint = Paint()
+        ..color = const Color(0xFF3A3462)
+        ..style = PaintingStyle.fill;
+
+      canvas.save();
+      canvas.translate(currentX, currentY);
+      canvas.rotate(currentRotation);
+      canvas.translate(-currentX, -currentY);
+
+      // 卡牌矩形
+      final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(6));
+      canvas.drawRRect(rrect, paint);
+
+      // 卡牌边框
+      final borderPaint = Paint()
+        ..color = Colors.white.withValues(alpha: 0.3)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1;
+      canvas.drawRRect(rrect, borderPaint);
+
+      // 装饰图案
+      final patternPaint = Paint()
+        ..color = Colors.white.withValues(alpha: 0.15)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1;
+      canvas.drawCircle(Offset(currentX, currentY), cardW * 0.3, patternPaint);
+      canvas.drawCircle(Offset(currentX, currentY), cardW * 0.15, patternPaint);
+
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ShufflePainter oldDelegate) {
+    return oldDelegate.shuffleProgress != shuffleProgress ||
+        oldDelegate.moveProgress != moveProgress ||
+        oldDelegate.scale != scale ||
+        oldDelegate.offsetY != offsetY ||
+        oldDelegate.cardW != cardW ||
+        oldDelegate.cardH != cardH;
+  }
+}
+
+/// 静态环形牌阵画家（洗牌动画完成后显示）
+class _StaticCirclePainter extends CustomPainter {
+  final double scale;           // 半径
+  final double offsetY;         // 圆心Y位置
+  final double cardW;           // 卡牌宽度
+  final double cardH;           // 卡牌高度
+  final double centerX;          // 屏幕中心X
+  final List<int> remainingCards; // 剩余卡牌
+
+  _StaticCirclePainter({
+    required this.scale,
+    required this.offsetY,
+    required this.cardW,
+    required this.cardH,
+    required this.centerX,
+    required this.remainingCards,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final total = remainingCards.length;
+    final angleStep = 2 * pi / total;
+
+    for (int i = 0; i < total; i++) {
+      final angle = angleStep * i - pi / 2;
+      final x = centerX + cos(angle) * scale;
+      final y = offsetY + sin(angle) * scale;
+
+      // 绘制卡牌背面（统一深色）
+      final rect = Rect.fromCenter(
+        center: Offset(x, y),
+        width: cardW,
+        height: cardH,
+      );
+
+      final paint = Paint()
+        ..color = const Color(0xFF3A3462)
+        ..style = PaintingStyle.fill;
+
+      // 卡牌旋转：指向圆心
+      canvas.save();
+      canvas.translate(x, y);
+      canvas.rotate(angle + pi / 2);
+      canvas.translate(-x, -y);
+
+      final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(6));
+      canvas.drawRRect(rrect, paint);
+
+      final borderPaint = Paint()
+        ..color = Colors.white.withValues(alpha: 0.3)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1;
+      canvas.drawRRect(rrect, borderPaint);
+
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _StaticCirclePainter oldDelegate) {
+    return false;  // 静态显示，不需要重绘
+  }
+}
+
+/// 环形上的单张卡
+class _CircleCard extends StatelessWidget {
+  final int deckType;
+  final double cardW;
+  final double cardH;
+
+  const _CircleCard({
+    required this.deckType,
+    required this.cardW,
+    required this.cardH,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      key: const ValueKey('back'),
-      width: w,
-      height: h,
+      width: cardW,
+      height: cardH,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF4A3F6B),
-            Color(0xFF2D2654),
-            Color(0xFF1A1A3E),
-          ],
+        color: const Color(0xFF3A3462),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.3),
+          width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.purple.withValues(alpha: 0.3),
-            blurRadius: 20,
-            spreadRadius: 2,
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 4,
+            offset: const Offset(2, 2),
           ),
         ],
       ),
-      child: Center(
-        child: CustomPaint(
-          size: Size(w * 0.6, h * 0.6),
-          painter: _BackPatternPainter(),
-        ),
-      ),
     );
   }
+}
 
-  Widget _buildCardFront(int cardId, bool reversed, double w, double h) {
-    Widget img = Image.asset(
-      'assets/images/card_oh/${selectedDeck.value}/${cardId.toString().padLeft(2, '0')}.jpg',
-      width: w,
-      height: h,
-      fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => Container(
-        width: w,
-        height: h,
-        color: Colors.grey[800],
-        child: Center(
-          child: Text(
-            cardId.toString(),
-            style: const TextStyle(color: Colors.white, fontSize: 48),
+/// ============================================================
+/// 主内容区域（扇形 + 已抽卡栏）
+/// ============================================================
+class _MainContent extends StatelessWidget {
+  final CardohCtrl controller;
+
+  const _MainContent({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        // 顶部已抽卡缩略图栏
+        Obx(() => _DrawnCardsBar(
+              controller: controller,
+              isEmpty: controller.drawnCardSets.isEmpty,
+            )),
+        // 中间区域
+        Expanded(
+          child: Stack(
+            children: [
+              // 扇形牌阵（始终在底层，viewing时半透明）
+              _FanCardView(controller: controller),
+              // 飞行中的卡（中间层）
+              Obx(() {
+                if (!controller.isFlying.value) return const SizedBox.shrink();
+                return _FlyingCardsView(controller: controller);
+              }),
+              // 查看已抽卡（顶层）
+              Obx(() {
+                if (controller.phase.value != CardohPhase.viewing) {
+                  return const SizedBox.shrink();
+                }
+                return _ViewingCardsView(controller: controller);
+              }),
+            ],
           ),
         ),
-      ),
+        // AI对话入口
+        Obx(() {
+          if (controller.phase.value == CardohPhase.viewing) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: TextButton.icon(
+                onPressed: controller.showAIDialog,
+                icon: const Icon(Icons.chat_bubble_outline, color: Color(0xFF4DB6AC), size: 18),
+                label: const Text(
+                  'AI疗愈对话',
+                  style: TextStyle(color: Color(0xFF4DB6AC), fontSize: 14),
+                ),
+              ),
+            );
+          }
+          return const SizedBox.shrink();
+        }),
+      ],
     );
+  }
+}
 
-    if (reversed) {
-      img = Transform.rotate(angle: pi, child: img);
+/// ============================================================
+/// 顶部已抽卡缩略图栏
+/// ============================================================
+class _DrawnCardsBar extends StatelessWidget {
+  final CardohCtrl controller;
+  final bool isEmpty;
+
+  const _DrawnCardsBar({
+    required this.controller,
+    required this.isEmpty,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (isEmpty) {
+      return Container(
+        height: 70,
+        color: const Color(0xFFB2DFDB).withValues(alpha: 0.5),
+        child: const Center(
+          child: Text(
+            '已抽卡将显示在这里',
+            style: TextStyle(color: Colors.black38, fontSize: 14),
+          ),
+        ),
+      );
     }
 
     return Container(
-      key: const ValueKey('front'),
+      height: 70,
+      color: const Color(0xFFB2DFDB).withValues(alpha: 0.9),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        itemCount: controller.drawnCardSets.length,
+        itemBuilder: (context, index) {
+          final cards = controller.drawnCardSets[index];
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: GestureDetector(
+              onTap: () => controller.viewDrawnSet(index),
+              child: _CardSetThumbnail(
+                cardIds: cards,
+                deckType: controller.selectedDeck.value ?? 1,
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// 卡组缩略图（单卡或四卡拼合）
+class _CardSetThumbnail extends StatelessWidget {
+  final List<int> cardIds;
+  final int deckType;
+
+  const _CardSetThumbnail({
+    required this.cardIds,
+    required this.deckType,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const double w = CardohCtrl.thumbW;  // 60
+    const double h = CardohCtrl.thumbH;  // 80
+
+    if (cardIds.length == 1) {
+      // 单卡：显示完整缩略图
+      return _buildSingleThumbnail(cardIds[0], w, h);
+    } else {
+      // 多卡：2x2拼合
+      return _buildMultiThumbnail(cardIds.take(4).toList(), w, h);
+    }
+  }
+
+  Widget _buildSingleThumbnail(int cardId, double w, double h) {
+    return Container(
       width: w,
       height: h,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(6),
         boxShadow: [
           BoxShadow(
-            color: Colors.purple.withValues(alpha: 0.4),
-            blurRadius: 25,
-            spreadRadius: 3,
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 4,
+            offset: const Offset(1, 2),
           ),
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: img,
+        borderRadius: BorderRadius.circular(6),
+        child: Image.asset(
+          'assets/images/card_oh/$deckType/${cardId.toString().padLeft(2, '0')}.jpg',
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Container(
+            color: Colors.grey[400],
+            child: Center(
+              child: Text(
+                cardId.toString(),
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
 
-  /// 构建扇形中单张卡片的widget
-  Widget buildFanCard(int cardId, int index, int totalVisible) {
-    const cardW = 70.0;
-    const cardH = 93.0;
+  Widget _buildMultiThumbnail(List<int> ids, double w, double h) {
+    return Container(
+      width: w,
+      height: h,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(6),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 4,
+            offset: const Offset(1, 2),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: GridView.count(
+          crossAxisCount: 2,
+          physics: const NeverScrollableScrollPhysics(),
+          children: List.generate(4, (i) {
+            if (i < ids.length) {
+              return Image.asset(
+                'assets/images/card_oh/$deckType/${ids[i].toString().padLeft(2, '0')}.jpg',
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(color: Colors.grey[400]),
+              );
+            }
+            return Container(color: Colors.grey[300]);
+          }),
+        ),
+      ),
+    );
+  }
+}
+
+/// ============================================================
+/// 扇形牌阵视图
+/// ============================================================
+class _FanCardView extends StatefulWidget {
+  final CardohCtrl controller;
+
+  const _FanCardView({required this.controller});
+
+  @override
+  State<_FanCardView> createState() => _FanCardViewState();
+}
+
+class _FanCardViewState extends State<_FanCardView>
+    with SingleTickerProviderStateMixin {
+  late PageController _pageController;
+  late AnimationController _entryAnimCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(viewportFraction: 0.3);
+    _entryAnimCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+    _entryAnimCtrl.forward();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    _entryAnimCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = widget.controller;
+
+    // 使用 Obx 监听状态变化
+    return Obx(() {
+      // viewing 阶段半透明且不可交互
+      final isViewing = controller.phase.value == CardohPhase.viewing;
+
+      final content = controller.hasSavedCircleState.value
+          ? _buildCircleView(controller)
+          : _buildFanView(controller);
+
+      return Opacity(
+        opacity: isViewing ? 0.3 : 1.0,
+        child: IgnorePointer(
+          ignoring: isViewing,
+          child: content,
+        ),
+      );
+    });
+  }
+
+  Widget _buildCircleView(CardohCtrl controller) {
+    final screenW = MediaQuery.of(context).size.width;
+
+    return Stack(
+      children: [
+        // 背景透明区域，可接受滑动
+        GestureDetector(
+          onHorizontalDragUpdate: (details) {
+            // 处理左右滑动旋转环形
+          },
+        ),
+        // 环形上的卡牌
+        ...List.generate(controller.remainingCards.length, (i) {
+          final total = controller.remainingCards.length;
+          final angle = (2 * pi * i / total) - pi / 2;
+          final scale = controller.savedScale;
+          final offsetY = controller.savedOffsetY;
+
+          final x = screenW / 2 + cos(angle) * scale;
+          final y = offsetY + sin(angle) * scale;
+
+          // 旋转角度：卡牌指向圆心
+          final rotation = angle + pi / 2;
+
+          return Positioned(
+            left: x - controller.savedCardW / 2,
+            top: y - controller.savedCardH / 2,
+            child: GestureDetector(
+              onTap: () {
+                // 获取卡牌中心位置
+                final cardCenter = Offset(x, y);
+                controller.onFanCardTap(controller.remainingCards[i], cardCenter);
+              },
+              child: Transform.rotate(
+                angle: rotation,
+                child: _CircleCard(
+                  deckType: controller.selectedDeck.value ?? 1,
+                  cardW: controller.savedCardW,
+                  cardH: controller.savedCardH,
+                ),
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _buildFanView(CardohCtrl controller) {
+    final cards = controller.remainingCards;
+
+    if (cards.isEmpty) {
+      return const Center(
+        child: Text(
+          '暂无剩余卡牌',
+          style: TextStyle(color: Colors.black45, fontSize: 16),
+        ),
+      );
+    }
+
+    final pageCount = (cards.length / CardohCtrl.visibleCards).ceil();
+
+    return Column(
+      children: [
+        // 剩余数量
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Text(
+            '剩余 ${cards.length} 张',
+            style: const TextStyle(color: Colors.black54, fontSize: 14),
+          ),
+        ),
+        // 扇形区域
+        Expanded(
+          child: Center(
+            child: SizedBox(
+              height: 220,
+              child: PageView.builder(
+                controller: _pageController,
+                itemCount: pageCount,
+                itemBuilder: (context, pageIndex) {
+                  return _buildFanRow(cards, pageIndex);
+                },
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFanRow(List<int> allCards, int pageIndex) {
+    const cardW = CardohCtrl.fanCardW;  // 120
+    const cardH = CardohCtrl.fanCardH;  // 160
+    const totalAngle = CardohCtrl.fanAngle * pi / 180;
+    const startAngle = -totalAngle / 2;
+
+    final startIdx = pageIndex * CardohCtrl.visibleCards;
+    final endIdx = min(startIdx + CardohCtrl.visibleCards, allCards.length);
+    final pageCards = allCards.sublist(startIdx, endIdx);
+
+    return AnimatedBuilder(
+      animation: _entryAnimCtrl,
+      builder: (context, child) {
+        return SizedBox(
+          width: 350,
+          height: 220,
+          child: Stack(
+            alignment: Alignment.center,
+            children: List.generate(pageCards.length, (i) {
+              final progress = pageCards.length > 1
+                  ? i / (pageCards.length - 1)
+                  : 0.5;
+              final angle = startAngle + progress * totalAngle;
+
+              // 计算卡片位置
+              const radius = 120.0;
+              final x = sin(angle + pi / 2) * radius;
+              final y = cos(angle) * 25;
+
+              // 入场动画
+              final entryProgress = (_entryAnimCtrl.value - i * 0.05).clamp(0.0, 1.0);
+              final entryScale = Curves.easeOut.transform(entryProgress);
+              final entryOpacity = entryProgress;
+
+              // 缩放从 0.5 到 1.0
+              final scale = 0.5 + 0.5 * entryScale;
+
+              return Positioned(
+                top: 110 - y - cardH / 2 * scale,
+                left: 175 + x - cardW / 2 * scale,
+                child: Opacity(
+                  opacity: entryOpacity,
+                  child: Transform.scale(
+                    scale: scale,
+                    child: _FanCard(
+                      cardId: pageCards[i],
+                      deckType: widget.controller.selectedDeck.value ?? 1,
+                      onTap: (center) {
+                        widget.controller.onFanCardTap(pageCards[i], center);
+                      },
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// 扇形中的单张卡
+class _FanCard extends StatelessWidget {
+  final int cardId;
+  final int deckType;
+  final Function(Offset) onTap;
+
+  const _FanCard({
+    required this.cardId,
+    required this.deckType,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const cardW = CardohCtrl.fanCardW;
+    const cardH = CardohCtrl.fanCardH;
 
     return GestureDetector(
-      onTap: () => drawCard(cardId),
+      onTapUp: (details) {
+        final box = context.findRenderObject() as RenderBox?;
+        if (box != null) {
+          final pos = box.localToGlobal(Offset.zero);
+          final center = Offset(
+            pos.dx + cardW / 2,
+            pos.dy + cardH / 2,
+          );
+          onTap(center);
+        }
+      },
       child: Container(
         width: cardW,
         height: cardH,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(10),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.4),
-              blurRadius: 8,
-              offset: const Offset(2, 3),
+              color: Colors.black.withValues(alpha: 0.3),
+              blurRadius: 12,
+              offset: const Offset(3, 5),
             ),
           ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(10),
           child: Image.asset(
-            'assets/images/card_oh/${selectedDeck.value}/${cardId.toString().padLeft(2, '0')}.jpg',
+            'assets/images/card_oh/$deckType/${cardId.toString().padLeft(2, '0')}.jpg',
             fit: BoxFit.cover,
             errorBuilder: (_, __, ___) => Container(
-              color: Colors.grey[700],
+              color: Colors.grey[400],
               child: Center(
-                child: Text(cardId.toString(), style: const TextStyle(color: Colors.white, fontSize: 16)),
+                child: Text(
+                  cardId.toString(),
+                  style: const TextStyle(color: Colors.white, fontSize: 24),
+                ),
               ),
             ),
           ),
@@ -404,123 +1575,475 @@ class CardohCtrl extends GetxController with GetTickerProviderStateMixin {
   }
 }
 
-/// 背面图案绘制
-class _BackPatternPainter extends CustomPainter {
+/// ============================================================
+/// 飞行中的卡视图
+/// ============================================================
+class _FlyingCardsView extends StatefulWidget {
+  final CardohCtrl controller;
+
+  const _FlyingCardsView({required this.controller});
+
   @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width * 0.4;
+  State<_FlyingCardsView> createState() => _FlyingCardsViewState();
+}
 
-    // 外圈
-    final outerPaint = Paint()
-      ..color = Colors.purple.withValues(alpha: 0.3)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-    canvas.drawCircle(center, radius, outerPaint);
+class _FlyingCardsViewState extends State<_FlyingCardsView>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _flyCtrl;
 
-    // 内圈
-    final innerPaint = Paint()
-      ..color = Colors.amber.withValues(alpha: 0.4)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5;
-    canvas.drawCircle(center, radius * 0.6, innerPaint);
+  @override
+  void initState() {
+    super.initState();
+    _flyCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
 
-    // 中心圆点
-    final dotPaint = Paint()
-      ..color = Colors.amber.withValues(alpha: 0.6)
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(center, radius * 0.1, dotPaint);
+    _flyCtrl.addListener(() {
+      widget.controller.flyProgress.value = _flyCtrl.value;
+    });
 
-    // 菱形装饰
-    final path = Path();
-    final diamondRadius = radius * 0.8;
-    path.moveTo(center.dx, center.dy - diamondRadius);
-    path.lineTo(center.dx + diamondRadius * 0.7, center.dy);
-    path.lineTo(center.dx, center.dy + diamondRadius);
-    path.lineTo(center.dx - diamondRadius * 0.7, center.dy);
-    path.close();
-
-    final diamondPaint = Paint()
-      ..color = Colors.purple.withValues(alpha: 0.2)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5;
-    canvas.drawPath(path, diamondPaint);
-
-    // 四角星
-    for (var i = 0; i < 4; i++) {
-      final angle = i * pi / 2;
-      final starX = center.dx + cos(angle) * radius * 0.85;
-      final starY = center.dy + sin(angle) * radius * 0.85;
-      canvas.drawCircle(Offset(starX, starY), 3, dotPaint);
-    }
+    _flyCtrl.forward().then((_) {
+      if (widget.controller.currentCards.length == 1) {
+        widget.controller.onFlyComplete();
+      } else {
+        widget.controller.onFourFlyComplete();
+      }
+    });
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-/// 视图
-class CardohView extends GetView<CardohCtrl> {
-  CardohView({super.key});
-
-  @override
-  final controller = Get.put(CardohCtrl());
+  void dispose() {
+    _flyCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF1A1A2E),
-      appBar: _buildAppBar(),
-      body: Obx(() => _buildBody()),
+    final cards = widget.controller.currentCards;
+    final starts = widget.controller.flyStartPositions;
+    final screenSize = MediaQuery.of(context).size;
+    final flyProgress = widget.controller.flyProgress.value;
+    final cardCount = cards.length;
+
+    // 目标位置：屏幕中心
+    final targetX = screenSize.width / 2 - CardohCtrl.fanCardW / 2;
+    final targetY = screenSize.height / 2 - CardohCtrl.fanCardH / 2;
+
+    return Stack(
+      children: List.generate(cardCount, (index) {
+        if (index >= starts.length) return const SizedBox.shrink();
+
+        // 交错动画：每张卡延迟
+        final delay = index * 0.1;
+        final cardProgress = ((flyProgress - delay) / (1 - delay)).clamp(0.0, 1.0);
+        final eased = Curves.easeOut.transform(cardProgress);
+
+        final startPos = starts[index];
+        final x = startPos.dx + (targetX - startPos.dx) * eased;
+        final y = startPos.dy + (targetY - startPos.dy) * eased;
+
+        // 缩放动画
+        final scale = 1.0 + 0.5 * eased;
+
+        // 翻牌动画：在飞行后期进行（当 eased > 0.5 时开始翻）
+        final flipProgress = ((eased - 0.5) / 0.5).clamp(0.0, 1.0);
+
+        return Positioned(
+          left: x,
+          top: y,
+          child: Transform.scale(
+            scale: scale,
+            child: _FlyingCard(
+              cardId: cards[index],
+              deckType: widget.controller.selectedDeck.value ?? 1,
+              flipProgress: flipProgress,
+            ),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+/// 飞行中的单张卡（带翻牌动画）
+class _FlyingCard extends StatefulWidget {
+  final int cardId;
+  final int deckType;
+  final double flipProgress; // 0.0=背面, 1.0=正面
+
+  const _FlyingCard({
+    required this.cardId,
+    required this.deckType,
+    this.flipProgress = 0.0,
+  });
+
+  @override
+  State<_FlyingCard> createState() => _FlyingCardState();
+}
+
+class _FlyingCardState extends State<_FlyingCard> {
+  @override
+  Widget build(BuildContext context) {
+    // 3D翻牌效果
+    final angle = widget.flipProgress * pi;
+    final transform = Matrix4.identity()
+      ..setEntry(3, 2, 0.001) // perspective
+      ..rotateY(angle);
+
+    // 根据角度判断显示哪一面
+    final showFront = widget.flipProgress > 0.5;
+
+    return Transform(
+      transform: transform,
+      alignment: Alignment.center,
+      child: Container(
+        width: CardohCtrl.fanCardW,
+        height: CardohCtrl.fanCardH,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.4),
+              blurRadius: 20,
+              offset: const Offset(5, 10),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: showFront
+              ? Image.asset(
+                  'assets/images/card_oh/${widget.deckType}/${widget.cardId.toString().padLeft(2, '0')}.jpg',
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    color: Colors.grey[400],
+                    child: Center(
+                      child: Text(
+                        widget.cardId.toString(),
+                        style: const TextStyle(color: Colors.white, fontSize: 24),
+                      ),
+                    ),
+                  ),
+                )
+              : _buildCardBack(),
+        ),
+      ),
     );
   }
 
-  PreferredSizeWidget _buildAppBar() {
-    return AppBar(
-      backgroundColor: const Color(0xFF1A1A2E),
-      elevation: 0,
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back, color: Colors.white),
-        onPressed: () {
-          if (controller.phase.value == CardohPhase.select) {
-            Get.back();
-          } else {
-            _showExitConfirm();
-          }
-        },
+  Widget _buildCardBack() {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF3A3462),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.3),
+          width: 1,
+        ),
       ),
-      title: Obx(() {
-        final deck = controller.selectedDeck.value;
-        final deckName = deck == 1 ? '基础卡' : (deck == 2 ? '复原卡' : 'OH Cards');
-        return Text(
-          deckName,
-          style: const TextStyle(color: Colors.white, fontSize: 18),
-        );
-      }),
-      centerTitle: true,
-      actions: [
-        // AI对话入口
-        Obx(() {
-          if (controller.phase.value == CardohPhase.select) {
-            return IconButton(
-              icon: const Icon(Icons.chat_bubble_outline, color: Colors.amber),
-              onPressed: controller.showAIDialog,
-              tooltip: 'AI对话',
-            );
+      child: const Center(
+        child: Text(
+          '?',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 48,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// ============================================================
+/// 查看已抽卡视图（放大/缩小/拖动）
+/// ============================================================
+class _ViewingCardsView extends StatefulWidget {
+  final CardohCtrl controller;
+
+  const _ViewingCardsView({required this.controller});
+
+  @override
+  State<_ViewingCardsView> createState() => _ViewingCardsViewState();
+}
+
+class _ViewingCardsViewState extends State<_ViewingCardsView> {
+  // 缩放和拖动状态
+  double _pinchScale = 1.0;
+  double _basePinchScale = 1.0;
+  double _offsetX = 0.0;
+  double _offsetY = 0.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final cards = widget.controller.currentCards;
+    final selectedIdx = widget.controller.selectedCardIndex.value;
+    final deckType = widget.controller.selectedDeck.value ?? 1;
+
+    if (cards.isEmpty) return const SizedBox.shrink();
+
+    // 如果选择了某张卡，只显示那张
+    if (selectedIdx != null && selectedIdx < cards.length) {
+      return _buildSingleCardView(
+        cards[selectedIdx],
+        deckType,
+        isZoomed: _pinchScale > 1.1,
+      );
+    }
+
+    // 多卡网格视图
+    return _buildMultiCardGrid(cards, deckType);
+  }
+
+  Widget _buildSingleCardView(int cardId, int deckType, {required bool isZoomed}) {
+    final screenSize = MediaQuery.of(context).size;
+    final baseW = CardohCtrl.fanCardW;
+    final baseH = CardohCtrl.fanCardH;
+    final maxW = CardohCtrl.maxCardW;
+    final maxH = CardohCtrl.maxCardH;
+
+    // 根据缩放计算当前尺寸
+    final currentW = baseW + (maxW - baseW) * ((_pinchScale - 1.0) / 1.5);
+    final currentH = baseH + (maxH - baseH) * ((_pinchScale - 1.0) / 1.5);
+
+    // 居中位置
+    final baseX = (screenSize.width - baseW) / 2;
+    final baseY = (screenSize.height - baseH) / 2 - 50;
+
+    // 加上拖动偏移
+    final finalX = baseX + _offsetX;
+    final finalY = baseY + _offsetY;
+
+    return GestureDetector(
+      onScaleStart: (details) {
+        _basePinchScale = _pinchScale;
+      },
+      onScaleUpdate: (details) {
+        setState(() {
+          _pinchScale = (_basePinchScale * details.scale).clamp(1.0, 2.5);
+          _offsetX += details.focalPointDelta.dx;
+          _offsetY += details.focalPointDelta.dy;
+        });
+      },
+      onTapUp: (details) {
+        // 点击卡牌：放大/缩小切换
+        setState(() {
+          if (_pinchScale > 1.1) {
+            _pinchScale = 1.0;
+            _basePinchScale = 1.0;
+            _offsetX = 0.0;
+            _offsetY = 0.0;
+          } else {
+            _pinchScale = 2.0; // 直接放大到2倍
           }
-          return const SizedBox.shrink();
+        });
+      },
+      child: Container(
+        color: Colors.transparent,
+        child: Stack(
+          children: [
+            Positioned(
+              left: finalX,
+              top: finalY,
+              child: Container(
+                width: currentW,
+                height: currentH,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.4),
+                      blurRadius: 30,
+                      offset: const Offset(5, 10),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.asset(
+                    'assets/images/card_oh/$deckType/${cardId.toString().padLeft(2, '0')}.jpg',
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                      color: Colors.grey[400],
+                      child: Center(
+                        child: Text(
+                          cardId.toString(),
+                          style: const TextStyle(color: Colors.white, fontSize: 32),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMultiCardGrid(List<int> cards, int deckType) {
+    // 计算网格布局
+    final cardCount = cards.length;
+    final crossAxisCount = cardCount <= 2 ? cardCount : 2;
+
+    return GestureDetector(
+      onTapUp: (details) {
+        // 点击空白区域不响应（由子卡片处理）
+      },
+      child: Container(
+        color: Colors.transparent,
+        child: Stack(
+          children: [
+            // 网格视图
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: crossAxisCount,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                    childAspectRatio: CardohCtrl.fanCardW / CardohCtrl.fanCardH,
+                  ),
+                  itemCount: cards.length,
+                  itemBuilder: (context, index) {
+                    return _buildGridCard(cards[index], deckType, index);
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGridCard(int cardId, int deckType, int index) {
+    return GestureDetector(
+      onTap: () {
+        // 选中这张卡进行放大
+        setState(() {
+          _pinchScale = 1.0;
+          _basePinchScale = 1.0;
+          _offsetX = 0.0;
+          _offsetY = 0.0;
+        });
+        widget.controller.selectCard(index);
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.3),
+              blurRadius: 12,
+              offset: const Offset(3, 5),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Image.asset(
+            'assets/images/card_oh/$deckType/${cardId.toString().padLeft(2, '0')}.jpg',
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(
+              color: Colors.grey[400],
+              child: Center(
+                child: Text(
+                  cardId.toString(),
+                  style: const TextStyle(color: Colors.white, fontSize: 20),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// ============================================================
+/// 右侧浮动工具条
+/// ============================================================
+class _FloatingToolbar extends StatelessWidget {
+  final CardohCtrl controller;
+
+  const _FloatingToolbar({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // 设置按钮
+        _ToolbarButton(
+          icon: Icons.settings,
+          tooltip: '设置',
+          onTap: () => controller.showSettingsDialog(),
+        ),
+        const SizedBox(height: 12),
+        // 卡组选择
+        Obx(() {
+          final isDisabled = controller.phase.value == CardohPhase.shuffling ||
+              controller.phase.value == CardohPhase.viewing;
+          return _ToolbarButton(
+            icon: Icons.layers,
+            tooltip: '卡组选择',
+            enabled: !isDisabled,
+            onTap: () => controller.switchDeck(),
+          );
+        }),
+        const SizedBox(height: 12),
+        // 重新开始
+        Obx(() {
+          final isDisabled = controller.drawnCardSets.isEmpty;
+          return _ToolbarButton(
+            icon: Icons.refresh,
+            tooltip: '重新开始',
+            enabled: !isDisabled,
+            onTap: () => _showResetConfirm(context),
+          );
+        }),
+        const SizedBox(height: 12),
+        // 洗牌
+        Obx(() {
+          final isDisabled = controller.phase.value == CardohPhase.shuffling ||
+              controller.phase.value == CardohPhase.viewing;
+          return _ToolbarButton(
+            icon: Icons.shuffle,
+            tooltip: '洗牌',
+            enabled: !isDisabled,
+            onTap: () => controller.startShuffle(),
+          );
+        }),
+        const SizedBox(height: 12),
+        // 四卡连抽
+        Obx(() {
+          final canDraw = controller.remainingCards.length >= 4 &&
+              (controller.phase.value == CardohPhase.fan ||
+                  controller.phase.value == CardohPhase.viewing);
+          return _ToolbarButton(
+            icon: Icons.grid_view,
+            tooltip: '四卡连抽',
+            enabled: canDraw,
+            onTap: () => _doFourDraw(context),
+          );
         }),
       ],
     );
   }
 
-  void _showExitConfirm() {
+  void _showResetConfirm(BuildContext context) {
     Get.dialog(
       AlertDialog(
         backgroundColor: const Color(0xFF2A2A4E),
-        title: const Text('确认退出？', style: TextStyle(color: Colors.white)),
+        title: const Text('重新开始', style: TextStyle(color: Colors.white)),
         content: const Text(
-          '退出后将结束本次抽卡',
+          '确定要重新开始吗？所有已抽卡将被清空。',
           style: TextStyle(color: Colors.white70),
         ),
         actions: [
@@ -532,657 +2055,66 @@ class CardohView extends GetView<CardohCtrl> {
             onPressed: () {
               Get.back();
               controller.resetAll();
-              Get.back();
             },
-            child: const Text('确认退出'),
+            child: const Text('确定', style: TextStyle(color: Colors.amber)),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildBody() {
-    switch (controller.phase.value) {
-      case CardohPhase.select:
-        return _buildSelectPage();
-      case CardohPhase.shuffling:
-        return _buildShufflePage();
-      case CardohPhase.fan:
-        return _buildFanPage();
-      case CardohPhase.revealed:
-        return _buildRevealedPage();
-    }
-  }
+  void _doFourDraw(BuildContext context) {
+    // 获取扇形中4张卡的位置
+    final cards = controller.remainingCards.take(4).toList();
+    if (cards.length < 4) return;
 
-  /// 卡组选择页
-  Widget _buildSelectPage() {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text(
-              '选择卡组',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              '抽取属于你的专属卡牌',
-              style: TextStyle(color: Colors.white54, fontSize: 16),
-            ),
-            const SizedBox(height: 48),
-            _DeckButton(
-              title: '基础卡',
-              subtitle: '共88张',
-              icon: Icons.style_outlined,
-              onTap: () => controller.selectDeck(1),
-            ),
-            const SizedBox(height: 20),
-            _DeckButton(
-              title: '复原卡',
-              subtitle: '共99张',
-              icon: Icons.auto_awesome_outlined,
-              showSpecialOption: true,
-              onTap: () => controller.selectDeck(2),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// 洗牌动画页
-  Widget _buildShufflePage() {
-    return Stack(
-      children: [
-        // 洗牌动画区域
-        Center(
-          child: Obx(() => _ShuffleAnimation(
-                cards: controller.remainingCards,
-                step: controller.shuffleStep.value,
-              )),
-        ),
-        // 遮罩文字
-        Center(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            decoration: BoxDecoration(
-              color: Colors.black45,
-              borderRadius: BorderRadius.circular(30),
-            ),
-            child: const Text(
-              '洗牌中...',
-              style: TextStyle(color: Colors.white, fontSize: 18),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// 扇形抽卡页
-  Widget _buildFanPage() {
-    final remaining = controller.remainingCards;
-    if (remaining.isEmpty) {
-      return const Center(
-        child: Text('暂无剩余卡牌', style: TextStyle(color: Colors.white54)),
+    // 生成4个位置（用于视觉效果）
+    final positions = List.generate(4, (i) {
+      return Offset(
+        100.0 + (i % 2) * 100,
+        200.0 + (i ~/ 2) * 100,
       );
-    }
+    });
 
-    return Column(
-      children: [
-        // 剩余数量提示
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Text(
-            '剩余 ${remaining.length} 张',
-            style: const TextStyle(color: Colors.white54, fontSize: 14),
-          ),
-        ),
-        // 扇形卡片区域
-        Expanded(
-          child: _FanCardView(controller: controller),
-        ),
-        // AI对话入口按钮
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: TextButton.icon(
-            onPressed: controller.showAIDialog,
-            icon: const Icon(Icons.chat_bubble_outline, color: Colors.amber, size: 18),
-            label: const Text(
-              'AI疗愈对话',
-              style: TextStyle(color: Colors.amber, fontSize: 14),
-            ),
-          ),
-        ),
-        // 已抽卡缩略区
-        Obx(() {
-          final drawn = controller.drawnCards;
-          if (drawn.isEmpty) return const SizedBox(height: 90);
-          return _DrawnCardsBar(
-            drawnCards: drawn,
-            onCardTap: controller.viewDrawnCard,
-            onReset: () => _showResetConfirm(),
-          );
-        }),
-      ],
-    );
-  }
-
-  void _showResetConfirm() {
-    Get.dialog(
-      AlertDialog(
-        backgroundColor: const Color(0xFF2A2A4E),
-        title: const Text('重新开始', style: TextStyle(color: Colors.white)),
-        content: const Text(
-          '确认后清空所有已抽卡牌，重新开始新一轮抽卡',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () {
-              Get.back();
-              if (controller.selectedDeck.value != null) {
-                controller.selectDeck(controller.selectedDeck.value!);
-              }
-            },
-            child: const Text('确认'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 抽中展示页
-  Widget _buildRevealedPage() {
-    final cardId = controller.drawnCard.value;
-    if (cardId == null) return const SizedBox();
-
-    return Stack(
-      children: [
-        // 背景点击关闭
-        GestureDetector(
-          onTap: controller.backToFan,
-          child: Container(color: Colors.transparent),
-        ),
-        // 卡片
-        Obx(() => controller._buildFlipCard(
-              cardId,
-              controller.isReversed.value,
-              controller.isFlipped.value,
-              controller.cardFlyProgress.value,
-              controller.cardFlipProgress.value,
-            )),
-        // AI对话入口
-        Positioned(
-          top: 60,
-          right: 16,
-          child: IconButton(
-            onPressed: controller.showAIDialog,
-            icon: const Icon(Icons.chat_bubble_outline, color: Colors.amber, size: 28),
-          ),
-        ),
-        // 底部提示
-        Positioned(
-          bottom: 60,
-          left: 0,
-          right: 0,
-          child: Center(
-            child: Obx(() {
-              if (!controller.isFlipped.value) return const SizedBox();
-              final reversed = controller.isReversed.value;
-              return Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.purple.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      reversed ? '逆 位' : '正 位',
-                      style: TextStyle(
-                        color: reversed ? Colors.orange : Colors.amber,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: controller.backToFan,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF4A3F6B),
-                      foregroundColor: Colors.white,
-                    ),
-                    child: Text(
-                      controller.remainingCards.isEmpty ? '完成' : '再抽一张',
-                    ),
-                  ),
-                ],
-              );
-            }),
-          ),
-        ),
-      ],
-    );
+    controller.drawFourCards(positions);
   }
 }
 
-/// 卡组选择按钮
-class _DeckButton extends StatelessWidget {
-  final String title;
-  final String subtitle;
+/// 工具条按钮
+class _ToolbarButton extends StatelessWidget {
   final IconData icon;
+  final String tooltip;
+  final bool enabled;
   final VoidCallback onTap;
-  final bool showSpecialOption;
 
-  const _DeckButton({
-    required this.title,
-    required this.subtitle,
+  const _ToolbarButton({
     required this.icon,
+    required this.tooltip,
     required this.onTap,
-    this.showSpecialOption = false,
+    this.enabled = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
+    return Tooltip(
+      message: tooltip,
+      preferBelow: false,
       child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(20),
         child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 24),
+          width: 40,
+          height: 40,
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF3A3462), Color(0xFF2A2454)],
-            ),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.purple.withValues(alpha: 0.3), width: 1),
+            color: enabled ? Colors.white : Colors.white24,
+            borderRadius: BorderRadius.circular(20),
           ),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 60,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      color: Colors.purple.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(icon, color: Colors.amber, size: 32),
-                  ),
-                  const SizedBox(width: 20),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          subtitle,
-                          style: const TextStyle(color: Colors.white54, fontSize: 14),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Icon(Icons.arrow_forward_ios, color: Colors.white38, size: 20),
-                ],
-              ),
-              // 复原卡特殊选项：是否包含39/40/41
-              if (showSpecialOption) ...[
-                const SizedBox(height: 12),
-                const Divider(color: Colors.white24, height: 1),
-                const SizedBox(height: 12),
-                _SpecialCardsToggle(),
-              ],
-            ],
+          child: Icon(
+            icon,
+            color: enabled ? const Color(0xFF4DB6AC) : Colors.white38,
+            size: 22,
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// 复原卡特殊卡（39/40/41）开关
-class _SpecialCardsToggle extends StatelessWidget {
-  _SpecialCardsToggle();
-
-  final _ctrl = Get.find<CardohCtrl>();
-
-  @override
-  Widget build(BuildContext context) {
-    return Obx(() => Row(
-          children: [
-            const Icon(Icons.info_outline, color: Colors.white38, size: 16),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                '包含 39/40/41 特殊卡',
-                style: TextStyle(
-                  color: _ctrl.includeSpecial.value ? Colors.white70 : Colors.white38,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-            Switch(
-              value: _ctrl.includeSpecial.value,
-              onChanged: (v) => _ctrl.includeSpecial.value = v,
-              activeTrackColor: Colors.amber.withValues(alpha: 0.5),
-              thumbColor: WidgetStateProperty.resolveWith((states) =>
-                  states.contains(WidgetState.selected) ? Colors.amber : Colors.grey),
-            ),
-          ],
-        ));
-  }
-}
-
-/// 洗牌动画widget
-class _ShuffleAnimation extends StatelessWidget {
-  final List<int> cards;
-  final int step;
-
-  const _ShuffleAnimation({required this.cards, required this.step});
-
-  @override
-  Widget build(BuildContext context) {
-    // 根据步数计算卡片位置
-    final displayCount = 12;
-    final visibleCards = cards.take(displayCount).toList();
-
-    return SizedBox(
-      width: 160,
-      height: 220,
-      child: Stack(
-        children: List.generate(visibleCards.length, (i) {
-          // 交错偏移效果
-          final offset = (step + i * 3) % 20;
-          final yOffset = offset * 2.0 - 20;
-          final rotation = (step % 2 == 0 ? 1 : -1) * (i % 3) * 0.02;
-
-          return Positioned(
-            top: yOffset + i * 3,
-            left: 20 + (i % 3) * 8.0 - 8,
-            child: Transform.rotate(
-              angle: rotation,
-              child: Container(
-                width: 70,
-                height: 93,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF3A3462),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.purple.withValues(alpha: 0.3)),
-                ),
-                child: Center(
-                  child: Text(
-                    visibleCards[i].toString(),
-                    style: const TextStyle(color: Colors.white54, fontSize: 12),
-                  ),
-                ),
-              ),
-            ),
-          );
-        }),
-      ),
-    );
-  }
-}
-
-/// 扇形卡片视图
-class _FanCardView extends StatefulWidget {
-  final CardohCtrl controller;
-
-  const _FanCardView({required this.controller});
-
-  @override
-  State<_FanCardView> createState() => _FanCardViewState();
-}
-
-class _FanCardViewState extends State<_FanCardView> {
-  late PageController _pageController;
-
-  @override
-  void initState() {
-    super.initState();
-    _pageController = PageController(viewportFraction: 0.25);
-    _pageController.addListener(_onPageChanged);
-  }
-
-  @override
-  void dispose() {
-    _pageController.removeListener(_onPageChanged);
-    _pageController.dispose();
-    super.dispose();
-  }
-
-  void _onPageChanged() {
-    widget.controller.currentPage.value = _pageController.page?.round() ?? 0;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final cards = widget.controller.remainingCards;
-    final pageCount = (cards.length / CardohCtrl.visibleCards).ceil();
-
-    if (cards.isEmpty) return const SizedBox();
-
-    return Center(
-      child: SizedBox(
-        height: 200,
-        child: PageView.builder(
-          controller: _pageController,
-          itemCount: pageCount,
-          itemBuilder: (context, pageIndex) {
-            return _buildFanRow(cards, pageIndex);
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFanRow(List<int> allCards, int pageIndex) {
-    const cardW = 70.0;
-    const cardH = 93.0;
-    const totalAngle = CardohCtrl.fanAngle * pi / 180;
-    const startAngle = -totalAngle / 2;
-
-    final startIdx = pageIndex * CardohCtrl.visibleCards;
-    final endIdx = (startIdx + CardohCtrl.visibleCards).clamp(0, allCards.length);
-    final pageCards = allCards.sublist(startIdx, endIdx);
-
-    return SizedBox(
-      width: 300,
-      height: 200,
-      child: Stack(
-        alignment: Alignment.center,
-        children: List.generate(pageCards.length, (i) {
-          final progress = pageCards.length > 1 ? i / (pageCards.length - 1) : 0.5;
-          final angle = startAngle + progress * totalAngle;
-
-          // 计算卡片位置
-          const radius = 100.0;
-          final x = sin(angle + pi / 2) * radius;
-          final y = cos(angle) * 30; // 轻微上下起伏
-
-          // 当前页的中间卡片角度为0
-          final offsetFromCenter = i - (pageCards.length / 2) + (pageCards.length % 2 == 0 ? 0.5 : 0);
-          final extraAngle = offsetFromCenter * 0.08;
-
-          return Positioned(
-            top: 50 - y,
-            left: 150 + x - cardW / 2,
-            child: GestureDetector(
-              onTap: () {
-                // 记录选中卡片位置（用于飞入动画）
-                final box = context.findRenderObject() as RenderBox?;
-                if (box != null) {
-                  final pos = box.localToGlobal(Offset.zero);
-                  widget.controller.selectedCardOffset = Offset(
-                    pos.dx + cardW / 2,
-                    pos.dy + cardH / 2,
-                  );
-                }
-                widget.controller.drawCard(pageCards[i]);
-              },
-              child: Transform.rotate(
-                angle: extraAngle,
-                child: Container(
-                  width: cardW,
-                  height: cardH,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(6),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.4),
-                        blurRadius: 10,
-                        offset: const Offset(2, 4),
-                      ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: Image.asset(
-                      'assets/images/card_oh/${widget.controller.selectedDeck.value}/${pageCards[i].toString().padLeft(2, '0')}.jpg',
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
-                        color: Colors.grey[700],
-                        child: Center(
-                          child: Text(
-                            pageCards[i].toString(),
-                            style: const TextStyle(color: Colors.white, fontSize: 16),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
-        }),
-      ),
-    );
-  }
-}
-
-/// 已抽卡缩略区
-class _DrawnCardsBar extends StatelessWidget {
-  final List<DrawnCard> drawnCards;
-  final Function(DrawnCard) onCardTap;
-  final VoidCallback onReset;
-
-  const _DrawnCardsBar({
-    required this.drawnCards,
-    required this.onCardTap,
-    required this.onReset,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 90,
-      decoration: BoxDecoration(
-        color: const Color(0xFF2A2A4E),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          // 标题行
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 8, 4),
-            child: Row(
-              children: [
-                Text(
-                  '已抽 ${drawnCards.length} 张',
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-                const Spacer(),
-                TextButton(
-                  onPressed: onReset,
-                  child: const Text(
-                    '重新开始',
-                    style: TextStyle(color: Colors.orange, fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // 缩略卡片列表
-          Expanded(
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              itemCount: drawnCards.length,
-              itemBuilder: (context, index) {
-                final card = drawnCards[index];
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: GestureDetector(
-                    onTap: () => onCardTap(card),
-                    child: Transform.rotate(
-                      angle: card.isReversed ? pi : 0,
-                      child: Container(
-                        width: 36,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: card.isReversed ? Colors.orange : Colors.amber.withValues(alpha: 0.5),
-                            width: 1,
-                          ),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(3),
-                          child: Image.asset(
-                            'assets/images/card_oh/${Get.find<CardohCtrl>().selectedDeck.value}/${card.id.toString().padLeft(2, '0')}.jpg',
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(
-                              color: Colors.grey[700],
-                              child: Center(
-                                child: Text(
-                                  card.id.toString(),
-                                  style: const TextStyle(color: Colors.white, fontSize: 10),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
       ),
     );
   }
