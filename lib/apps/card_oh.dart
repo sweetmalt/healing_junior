@@ -229,9 +229,10 @@ class CardohCtrl extends GetxController {
     selectedCardIndex.value = 0;
   }
 
-  /// 四卡连抽
-  void drawFourCards(List<Offset> cardCenters) {
-    if (phase.value != CardohPhase.fan || isFlying.value) return;
+  /// 四卡连抽 - 随机选4张从扇形飞出
+  void drawFourCards() {
+    if (phase.value != CardohPhase.fan && phase.value != CardohPhase.viewing) return;
+    if (isFlying.value) return;
     if (remainingCards.length < 4) return;
 
     // 随机选4张
@@ -244,14 +245,36 @@ class CardohCtrl extends GetxController {
       selected.add(remainingCopy.removeAt(idx));
     }
 
+    // 计算4张卡在环形上的位置作为飞行起点
+    final positions = <Offset>[];
+    final allCards = fanDisplayCards;
+    for (final cardId in selected) {
+      final idx = allCards.indexOf(cardId);
+      if (idx >= 0) {
+        final angle = (2 * pi * idx / allCards.length) - pi / 2 + circleRotation.value;
+        final x = Get.width / 2 + cos(angle) * savedScale;
+        final y = savedOffsetY + sin(angle) * savedScale;
+        positions.add(Offset(x, y));
+      } else {
+        // 兜底：随机位置
+        positions.add(Offset(
+          Get.width / 2 + (random.nextDouble() - 0.5) * 200,
+          savedOffsetY + (random.nextDouble() - 0.5) * 200,
+        ));
+      }
+    }
+
     // 记录飞行起点
-    flyStartPositions.value = cardCenters.take(4).toList();
+    flyStartPositions.value = positions;
 
     // 更新剩余卡
     remainingCards.value = remainingCopy;
 
     // 设置当前卡
     currentCards.value = selected;
+
+    // 多卡模式：selectedCardIndex = null 表示显示全部
+    selectedCardIndex.value = null;
 
     // 标记飞行状态
     isFlying.value = true;
@@ -622,10 +645,15 @@ class _StackedCardsView extends StatelessWidget {
               width: 60 - offset,
               height: 80 - offset * 1.2,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(4),
-                color: deckType == null
-                    ? const Color(0xFF3A3462)
-                    : const Color(0xFF4DB6AC),
+                borderRadius: BorderRadius.circular(6),
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFFB2DFDB), // 比背景 E0F7FA 深一点
+                    Color(0xFF80CBC4),
+                  ],
+                ),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.2),
@@ -634,20 +662,10 @@ class _StackedCardsView extends StatelessWidget {
                   ),
                 ],
                 border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.3),
-                  width: 0.5,
+                  color: Colors.white.withValues(alpha: 0.5),
+                  width: 1,
                 ),
               ),
-              child: deckType == null
-                  ? null
-                  : ClipRRect(
-                      borderRadius: BorderRadius.circular(3.5),
-                      child: Image.asset(
-                        'assets/images/card_oh/$deckType/back.jpg',
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const SizedBox(),
-                      ),
-                    ),
             ),
           );
         }),
@@ -806,56 +824,26 @@ class _ShufflePageState extends State<_ShufflePage>
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        // 洗牌动画区域
-        Center(
-          child: AnimatedBuilder(
-            animation: Listenable.merge([_shuffleCtrl, _moveCtrl]),
-            builder: (context, child) {
-              return CustomPaint(
-                size: Size(MediaQuery.of(context).size.width,
-                    MediaQuery.of(context).size.height),
-                painter: _ShufflePainter(
-                  shuffleProgress: _shuffleCtrl.value,
-                  moveProgress: _moveCtrl.value,
-                  scale: _scaleAnim.value,
-                  offsetY: _offsetYAnim.value,
-                  cardW: _cardWAnim.value,
-                  cardH: _cardHAnim.value,
-                  cardTargets: _cardTargets,
-                  centerX: MediaQuery.of(context).size.width / 2,
-                ),
-              );
-            },
-          ),
-        ),
-        // 遮罩文字
-        Center(
-          child: AnimatedBuilder(
-            animation: Listenable.merge([_shuffleCtrl, _moveCtrl]),
-            builder: (context, child) {
-              String text = '洗牌中...';
-              if (_shuffleCtrl.value >= 1.0 && _moveCtrl.value == 0) {
-                text = '即将完成...';
-              } else if (_moveCtrl.isAnimating) {
-                text = '';
-              }
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                decoration: BoxDecoration(
-                  color: Colors.black38,
-                  borderRadius: BorderRadius.circular(30),
-                ),
-                child: Text(
-                  text,
-                  style: const TextStyle(color: Colors.white, fontSize: 18),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
+    return Center(
+      child: AnimatedBuilder(
+        animation: Listenable.merge([_shuffleCtrl, _moveCtrl]),
+        builder: (context, child) {
+          return CustomPaint(
+            size: Size(MediaQuery.of(context).size.width,
+                MediaQuery.of(context).size.height),
+            painter: _ShufflePainter(
+              shuffleProgress: _shuffleCtrl.value,
+              moveProgress: _moveCtrl.value,
+              scale: _scaleAnim.value,
+              offsetY: _offsetYAnim.value,
+              cardW: _cardWAnim.value,
+              cardH: _cardHAnim.value,
+              cardTargets: _cardTargets,
+              centerX: MediaQuery.of(context).size.width / 2,
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -956,8 +944,16 @@ class _ShufflePainter extends CustomPainter {
         height: cardH,
       );
 
-      final paint = Paint()
-        ..color = const Color(0xFF3A3462)
+      // 渐变画笔（比背景 E0F7FA 深一点）
+      final gradientPaint = Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFFB2DFDB),
+            Color(0xFF80CBC4),
+          ],
+        ).createShader(rect)
         ..style = PaintingStyle.fill;
 
       canvas.save();
@@ -966,23 +962,15 @@ class _ShufflePainter extends CustomPainter {
       canvas.translate(-currentX, -currentY);
 
       // 卡牌矩形
-      final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(6));
-      canvas.drawRRect(rrect, paint);
+      final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(8));
+      canvas.drawRRect(rrect, gradientPaint);
 
       // 卡牌边框
       final borderPaint = Paint()
-        ..color = Colors.white.withValues(alpha: 0.3)
+        ..color = Colors.white.withValues(alpha: 0.5)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1;
+        ..strokeWidth = 1.5;
       canvas.drawRRect(rrect, borderPaint);
-
-      // 装饰图案
-      final patternPaint = Paint()
-        ..color = Colors.white.withValues(alpha: 0.15)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1;
-      canvas.drawCircle(Offset(currentX, currentY), cardW * 0.3, patternPaint);
-      canvas.drawCircle(Offset(currentX, currentY), cardW * 0.15, patternPaint);
 
       canvas.restore();
     }
@@ -1017,15 +1005,22 @@ class _CircleCard extends StatelessWidget {
       width: cardW,
       height: cardH,
       decoration: BoxDecoration(
-        color: const Color(0xFF3A3462),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(8),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFFB2DFDB), // 比背景 E0F7FA 深一点
+            Color(0xFF80CBC4),
+          ],
+        ),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.3),
-          width: 1,
+          color: Colors.white.withValues(alpha: 0.5),
+          width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
+            color: Colors.black.withValues(alpha: 0.2),
             blurRadius: 4,
             offset: const Offset(2, 2),
           ),
@@ -1593,28 +1588,37 @@ class _FlyingCardsViewState extends State<_FlyingCardsView>
       final flyProgress = widget.controller.flyProgress.value;
       final cardCount = cards.length;
 
-      // 目标位置：屏幕中心
-      final targetX = screenSize.width / 2 - CardohCtrl.fanCardW / 2;
-      final targetY = screenSize.height / 2 - CardohCtrl.fanCardH / 2;
+      // 计算目标位置：单卡居中，四卡2x2网格
+      final targetPositions = _calculateTargetPositions(screenSize, cardCount);
 
       return Stack(
         children: List.generate(cardCount, (index) {
           if (index >= starts.length) return const SizedBox.shrink();
 
           // 交错动画：每张卡延迟
-          final delay = index * 0.1;
-          final cardProgress = ((flyProgress - delay) / (1 - delay)).clamp(0.0, 1.0);
+          final delay = index * 0.15;
+          final cardProgress = ((flyProgress - delay) / (1 - delay * cardCount * 0.5)).clamp(0.0, 1.0);
           final eased = Curves.easeOut.transform(cardProgress);
 
+          // 起点是卡中心位置，需要转为左上角
           final startPos = starts[index];
-          final x = startPos.dx + (targetX - startPos.dx) * eased;
-          final y = startPos.dy + (targetY - startPos.dy) * eased;
+          final startLeft = startPos.dx - CardohCtrl.fanCardW / 2;
+          final startTop = startPos.dy - CardohCtrl.fanCardH / 2;
 
-          // 缩放动画
-          final scale = 1.0 + 0.5 * eased;
+          // 目标位置（单卡或2x2网格）
+          final target = targetPositions[index];
+          final targetLeft = target.dx;
+          final targetTop = target.dy;
 
-          // 翻牌动画：在飞行后期进行（当 eased > 0.5 时开始翻）
-          final flipProgress = ((eased - 0.5) / 0.5).clamp(0.0, 1.0);
+          // 插值计算当前位置（使用左上角）
+          final x = startLeft + (targetLeft - startLeft) * eased;
+          final y = startTop + (targetTop - startTop) * eased;
+
+          // 缩放动画：单卡 1.0->1.5，四卡 1.0->1.0（保持原尺寸）
+          final scale = cardCount == 1 ? (1.0 + 0.5 * eased) : 1.0;
+
+          // 翻牌动画：在飞行后期进行（当 eased > 0.6 时开始翻）
+          final flipProgress = ((eased - 0.6) / 0.4).clamp(0.0, 1.0);
 
           return Positioned(
             left: x,
@@ -1631,6 +1635,35 @@ class _FlyingCardsViewState extends State<_FlyingCardsView>
         }),
       );
     });
+  }
+
+  /// 计算目标位置：单卡居中，四卡2x2网格
+  List<Offset> _calculateTargetPositions(Size screenSize, int cardCount) {
+    if (cardCount == 1) {
+      // 单卡：居中
+      return [
+        Offset(
+          screenSize.width / 2 - CardohCtrl.maxCardW / 2,
+          screenSize.height / 2 - CardohCtrl.maxCardH / 2,
+        ),
+      ];
+    } else {
+      // 四卡：2x2网格居中
+      const cardW = CardohCtrl.fanCardW;  // 120
+      const cardH = CardohCtrl.fanCardH;  // 160
+      const spacing = 20.0;
+      final gridW = cardW * 2 + spacing;
+      final gridH = cardH * 2 + spacing;
+      final startX = (screenSize.width - gridW) / 2;
+      final startY = (screenSize.height - gridH) / 2;
+
+      return [
+        Offset(startX, startY),                             // 左上
+        Offset(startX + cardW + spacing, startY),           // 右上
+        Offset(startX, startY + cardH + spacing),            // 左下
+        Offset(startX + cardW + spacing, startY + cardH + spacing), // 右下
+      ];
+    }
   }
 }
 
@@ -1703,18 +1736,25 @@ class _FlyingCardState extends State<_FlyingCard> {
   Widget _buildCardBack() {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF3A3462),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFFB2DFDB), // 比背景 E0F7FA 深一点
+            Color(0xFF80CBC4),
+          ],
+        ),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.3),
-          width: 1,
+          color: Colors.white.withValues(alpha: 0.5),
+          width: 1.5,
         ),
       ),
       child: const Center(
         child: Text(
           '?',
           style: TextStyle(
-            color: Colors.white,
+            color: Color(0xFF00695C), // 深青色
             fontSize: 48,
             fontWeight: FontWeight.bold,
           ),
@@ -1751,12 +1791,20 @@ class _ViewingCardsViewState extends State<_ViewingCardsView> {
 
     if (cards.isEmpty) return const SizedBox.shrink();
 
-    // 如果选择了某张卡，只显示那张
+    // 单卡模式：始终显示300x400，支持拖放和缩放
+    if (cards.length == 1) {
+      return _buildSingleCardView(cards[0], deckType);
+    }
+
+    // 多卡模式：如果有选中的卡，显示放大的卡在其他卡之上
     if (selectedIdx != null && selectedIdx < cards.length) {
-      return _buildSingleCardView(
-        cards[selectedIdx],
-        deckType,
-        isZoomed: _pinchScale > 1.1,
+      return Stack(
+        children: [
+          // 背景：显示其他卡的小图
+          _buildMultiCardGrid(cards, deckType, excludeIndex: selectedIdx),
+          // 前景：放大的卡
+          _buildZoomedCard(cards[selectedIdx], deckType),
+        ],
       );
     }
 
@@ -1764,29 +1812,22 @@ class _ViewingCardsViewState extends State<_ViewingCardsView> {
     return _buildMultiCardGrid(cards, deckType);
   }
 
-  Widget _buildSingleCardView(int cardId, int deckType, {required bool isZoomed}) {
+  /// 单卡视图：300x400居中，支持拖放和缩放
+  Widget _buildSingleCardView(int cardId, int deckType) {
     final screenSize = MediaQuery.of(context).size;
-    final baseW = CardohCtrl.fanCardW;
-    final baseH = CardohCtrl.fanCardH;
-    final maxW = CardohCtrl.maxCardW;
-    final maxH = CardohCtrl.maxCardH;
-
-    // 根据缩放计算当前尺寸
-    final currentW = baseW + (maxW - baseW) * ((_pinchScale - 1.0) / 1.5);
-    final currentH = baseH + (maxH - baseH) * ((_pinchScale - 1.0) / 1.5);
+    const cardW = CardohCtrl.maxCardW;  // 300
+    const cardH = CardohCtrl.maxCardH;  // 400
 
     // 居中位置
-    final baseX = (screenSize.width - baseW) / 2;
-    final baseY = (screenSize.height - baseH) / 2 - 50;
+    final baseX = (screenSize.width - cardW) / 2;
+    final baseY = (screenSize.height - cardH) / 2;
 
     // 加上拖动偏移
     final finalX = baseX + _offsetX;
     final finalY = baseY + _offsetY;
 
-    // 只在图片区域响应手势
     return Stack(
       children: [
-        // 图片本身
         Positioned(
           left: finalX,
           top: finalY,
@@ -1801,22 +1842,18 @@ class _ViewingCardsViewState extends State<_ViewingCardsView> {
                 _offsetY += details.focalPointDelta.dy;
               });
             },
-            onTapUp: (details) {
-              // 点击卡牌：放大/缩小切换
+            onDoubleTap: () {
+              // 双击重置
               setState(() {
-                if (_pinchScale > 1.1) {
-                  _pinchScale = 1.0;
-                  _basePinchScale = 1.0;
-                  _offsetX = 0.0;
-                  _offsetY = 0.0;
-                } else {
-                  _pinchScale = 2.0;
-                }
+                _pinchScale = 1.0;
+                _basePinchScale = 1.0;
+                _offsetX = 0.0;
+                _offsetY = 0.0;
               });
             },
             child: Container(
-              width: currentW,
-              height: currentH,
+              width: cardW * _pinchScale,
+              height: cardH * _pinchScale,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
@@ -1835,10 +1872,8 @@ class _ViewingCardsViewState extends State<_ViewingCardsView> {
                   errorBuilder: (_, __, ___) => Container(
                     color: Colors.grey[400],
                     child: Center(
-                      child: Text(
-                        cardId.toString(),
-                        style: const TextStyle(color: Colors.white, fontSize: 32),
-                      ),
+                      child: Text(cardId.toString(),
+                          style: const TextStyle(color: Colors.white, fontSize: 32)),
                     ),
                   ),
                 ),
@@ -1850,77 +1885,155 @@ class _ViewingCardsViewState extends State<_ViewingCardsView> {
     );
   }
 
-  Widget _buildMultiCardGrid(List<int> cards, int deckType) {
-    // 计算网格布局
-    final cardCount = cards.length;
-    final crossAxisCount = cardCount <= 2 ? cardCount : 2;
+  /// 多卡网格视图（2x2）：每张卡120x160，点击放大
+  Widget _buildMultiCardGrid(List<int> cards, int deckType, {int? excludeIndex}) {
+    final screenSize = MediaQuery.of(context).size;
+    const cardW = CardohCtrl.fanCardW;  // 120
+    const cardH = CardohCtrl.fanCardH;  // 160
+    const spacing = 20.0;
+    final gridW = cardW * 2 + spacing;
+    final gridH = cardH * 2 + spacing;
+    final startX = (screenSize.width - gridW) / 2;
+    final startY = (screenSize.height - gridH) / 2;
+
+    // 2x2位置
+    final positions = [
+      Offset(startX, startY),
+      Offset(startX + cardW + spacing, startY),
+      Offset(startX, startY + cardH + spacing),
+      Offset(startX + cardW + spacing, startY + cardH + spacing),
+    ];
 
     return Stack(
-      children: [
-        // 网格视图
-        Center(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: crossAxisCount,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: CardohCtrl.fanCardW / CardohCtrl.fanCardH,
+      children: List.generate(cards.length, (i) {
+        if (excludeIndex != null && i == excludeIndex) {
+          return const SizedBox.shrink();
+        }
+        final pos = positions[i];
+        return Positioned(
+          left: pos.dx,
+          top: pos.dy,
+          child: GestureDetector(
+            onTap: () {
+              // 点击放大
+              widget.controller.selectedCardIndex.value = i;
+              setState(() {
+                _pinchScale = 1.0;
+                _basePinchScale = 1.0;
+                _offsetX = 0.0;
+                _offsetY = 0.0;
+              });
+            },
+            child: Container(
+              width: cardW,
+              height: cardH,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 10,
+                    offset: const Offset(3, 5),
+                  ),
+                ],
               ),
-              itemCount: cards.length,
-              itemBuilder: (context, index) {
-                return _buildGridCard(cards[index], deckType, index);
-              },
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.asset(
+                  'assets/images/card_oh/$deckType/${cards[i].toString().padLeft(2, '0')}.jpg',
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    color: Colors.grey[400],
+                    child: Center(
+                      child: Text(cards[i].toString(),
+                          style: const TextStyle(color: Colors.white, fontSize: 24)),
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
-        ),
-      ],
+        );
+      }),
     );
   }
 
-  Widget _buildGridCard(int cardId, int deckType, int index) {
-    return GestureDetector(
-      onTap: () {
-        // 选中这张卡进行放大
-        setState(() {
-          _pinchScale = 1.0;
-          _basePinchScale = 1.0;
-          _offsetX = 0.0;
-          _offsetY = 0.0;
-        });
-        widget.controller.selectCard(index);
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
-              blurRadius: 12,
-              offset: const Offset(3, 5),
-            ),
-          ],
+  /// 放大的单卡（从多卡选中）：300x400，支持拖放缩放
+  Widget _buildZoomedCard(int cardId, int deckType) {
+    final screenSize = MediaQuery.of(context).size;
+    const cardW = CardohCtrl.maxCardW;  // 300
+    const cardH = CardohCtrl.maxCardH;  // 400
+
+    final baseX = (screenSize.width - cardW) / 2;
+    final baseY = (screenSize.height - cardH) / 2;
+    final finalX = baseX + _offsetX;
+    final finalY = baseY + _offsetY;
+
+    return Stack(
+      children: [
+        // 点击背景关闭
+        Positioned.fill(
+          child: GestureDetector(
+            onTap: () {
+              widget.controller.selectedCardIndex.value = null;
+            },
+            child: Container(color: Colors.transparent),
+          ),
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: Image.asset(
-            'assets/images/card_oh/$deckType/${cardId.toString().padLeft(2, '0')}.jpg',
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(
-              color: Colors.grey[400],
-              child: Center(
-                child: Text(
-                  cardId.toString(),
-                  style: const TextStyle(color: Colors.white, fontSize: 20),
+        // 放大的卡
+        Positioned(
+          left: finalX,
+          top: finalY,
+          child: GestureDetector(
+            onScaleStart: (details) {
+              _basePinchScale = _pinchScale;
+            },
+            onScaleUpdate: (details) {
+              setState(() {
+                _pinchScale = (_basePinchScale * details.scale).clamp(1.0, 2.5);
+                _offsetX += details.focalPointDelta.dx;
+                _offsetY += details.focalPointDelta.dy;
+              });
+            },
+            onDoubleTap: () {
+              setState(() {
+                _pinchScale = 1.0;
+                _basePinchScale = 1.0;
+                _offsetX = 0.0;
+                _offsetY = 0.0;
+              });
+            },
+            child: Container(
+              width: cardW * _pinchScale,
+              height: cardH * _pinchScale,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.5),
+                    blurRadius: 40,
+                    offset: const Offset(5, 10),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.asset(
+                  'assets/images/card_oh/$deckType/${cardId.toString().padLeft(2, '0')}.jpg',
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    color: Colors.grey[400],
+                    child: Center(
+                      child: Text(cardId.toString(),
+                          style: const TextStyle(color: Colors.white, fontSize: 32)),
+                    ),
+                  ),
                 ),
               ),
             ),
           ),
         ),
-      ),
+      ],
     );
   }
 }
@@ -2023,19 +2136,8 @@ class _FloatingToolbar extends StatelessWidget {
   }
 
   void _doFourDraw(BuildContext context) {
-    // 获取扇形中4张卡的位置
-    final cards = controller.remainingCards.take(4).toList();
-    if (cards.length < 4) return;
-
-    // 生成4个位置（用于视觉效果）
-    final positions = List.generate(4, (i) {
-      return Offset(
-        100.0 + (i % 2) * 100,
-        200.0 + (i ~/ 2) * 100,
-      );
-    });
-
-    controller.drawFourCards(positions);
+    // 四卡连抽：控制器内部随机选卡并计算飞行起点
+    controller.drawFourCards();
   }
 }
 
