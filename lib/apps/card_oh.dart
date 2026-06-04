@@ -165,18 +165,10 @@ class CardohCtrl extends GetxController {
   /// 选择卡组（仅选择，不开始洗牌）
   void selectDeck(int deck) {
     selectedDeck.value = deck;
-    int totalCards = deck == 1 ? baseDeckCount : recoveryDeckCount;
-    includeSpecial.value = false; // 默认不包含特殊卡
+    // 保留 includeSpecial 的当前设置，不强制重置
+    // 重建卡组时会根据 includeSpecial 决定是否包含特殊卡
+    _rebuildCards();
 
-    // 初始化卡牌列表
-    fanDisplayCards.value = List.generate(totalCards, (i) => i + 1);
-
-    // 基础卡默认不包含39/40/41
-    if (deck == 1) {
-      fanDisplayCards.value = fanDisplayCards.where((id) => !specialCardIds.contains(id)).toList();
-    }
-
-    remainingCards.value = List.from(fanDisplayCards);
     drawnCardSets.clear();
     currentCards.clear();
     selectedCardIndex.value = null;
