@@ -84,7 +84,7 @@ class CardohCtrl extends GetxController {
   static const double expandedCircleRadius = 400.0;
 
   /// 圆环最终位置：顶端距屏幕底线240px
-  /// 圆心Y = 屏幕高度 - 240 + 400 = 屏幕高度 + 160
+  /// 圆心Y = (屏幕高度 - 240) + 半径
   double get finalCircleCenterY => Get.height - 240 + expandedCircleRadius;
 
   /// 圆环初始中心Y（屏幕正中央）
@@ -99,17 +99,24 @@ class CardohCtrl extends GetxController {
   double savedCardW = cardW0;
   double savedCardH = cardH0;
 
+  /// 保存的每张卡的角度（用于洗牌动画结束后保持随机位置）
+  List<double> savedCardAngles = [];
+
   /// 保存环形牌阵的最终状态
   void saveCircleState({
     required double scale,
     required double offsetY,
     required double cardW,
     required double cardH,
+    List<double>? cardAngles,
   }) {
     savedScale = scale;
     savedOffsetY = offsetY;
     savedCardW = cardW;
     savedCardH = cardH;
+    if (cardAngles != null) {
+      savedCardAngles = cardAngles;
+    }
     hasSavedCircleState.value = true;
   }
 
@@ -189,6 +196,21 @@ class CardohCtrl extends GetxController {
 
   /// 洗牌完成，进入扇形
   void onShuffleComplete() {
+    // 对 fanDisplayCards 进行真正的 Fisher-Yates 洗牌
+    // 这是模拟真实洗牌的核心：洗牌后卡牌的排列顺序是随机的
+    final cards = fanDisplayCards.toList();
+    final random = Random();
+    for (int i = cards.length - 1; i > 0; i--) {
+      final j = random.nextInt(i + 1);
+      final temp = cards[i];
+      cards[i] = cards[j];
+      cards[j] = temp;
+    }
+    fanDisplayCards.value = cards;
+
+    // 重建 remainingCards（未抽的卡也重新随机）
+    remainingCards.value = List.from(fanDisplayCards);
+
     phase.value = CardohPhase.fan;
   }
 
@@ -875,15 +897,15 @@ class _ShufflePageState extends State<_ShufflePage>
     _moveCtrl.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
         if (mounted) {
-          // 将环形牌阵的最终状态保存到控制器
+          // 保存圆环的视觉状态（尺寸和位置）
           widget.controller.saveCircleState(
             scale: _scaleAnim.value,
             offsetY: _offsetYAnim.value,
             cardW: _cardWAnim.value,
             cardH: _cardHAnim.value,
           );
-          // 进入扇形阶段（但继续显示环形）
-          widget.controller.phase.value = CardohPhase.fan;
+          // 执行真正的随机洗牌（Fisher-Yates）并进入扇形阶段
+          widget.controller.onShuffleComplete();
         }
       }
     });
@@ -895,15 +917,18 @@ class _ShufflePageState extends State<_ShufflePage>
     final totalCards = widget.controller.fanDisplayCards.length;
     final random = Random();
 
-    // 生成所有卡牌的目标角度（均匀分布在圆周上）
-    // 角度从顶部(-π/2)开始，顺时针分布
+    // 卡牌位置均匀分布在圆环上
+    // 角度从顶部(-π/2)开始，顺时针均匀分布
     final targetAngles = List.generate(
       totalCards,
       (i) => (2 * pi * i / totalCards) - pi / 2,
     );
 
-    // 打乱飞行顺序（随机）
-    targetAngles.shuffle(random);
+    // 随机延迟（0.05~0.15秒），错开飞行时间
+    final delays = List.generate(
+      totalCards,
+      (_) => 0.05 + random.nextDouble() * 0.10,
+    );
 
     _cardTargets = List.generate(totalCards, (i) {
       // 每张卡在环形上的目标角度（均匀分布）
@@ -912,8 +937,8 @@ class _ShufflePageState extends State<_ShufflePage>
       // 飞行方向：从中心向目标点飞去
       final flyAngle = targetAngle;
 
-      // 每张卡延迟i * 0.1秒开始飞行
-      final delay = i * 0.1;
+      // 每张卡随机延迟
+      final delay = delays[i];
 
       // 最终旋转角度：卡牌指向圆心（垂直于半径方向）
       final finalRotation = targetAngle + pi / 2;
@@ -1442,12 +1467,13 @@ class _FanCardViewState extends State<_FanCardView>
       child: Stack(
         children: [
           // 环形上的卡牌（基于 fanDisplayCards，显示所有卡）
+          // fanDisplayCards 的顺序已经是随机的（通过 Fisher-Yates 洗牌）
+          // 卡牌位置均匀分布在圆环上
           ...List.generate(allCards.length, (i) {
             final cardId = allCards[i];
             final isDrawn = !remaining.contains(cardId);
-            final total = allCards.length;
-            // 基础角度 + 旋转偏移
-            final baseAngle = (2 * pi * i / total) - pi / 2;
+            // 均匀分布的角度
+            final baseAngle = (2 * pi * i / allCards.length) - pi / 2;
             final angle = baseAngle + controller.circleRotation.value;
             final scale = controller.savedScale;
             final offsetY = controller.savedOffsetY;
