@@ -83,9 +83,11 @@ class CardohCtrl extends GetxController {
   /// 放大后的圆环半径
   static const double expandedCircleRadius = 400.0;
 
-  /// 圆环最终位置：顶端距屏幕底线240px
-  /// 圆心Y = (屏幕高度 - 240) + 半径
-  double get finalCircleCenterY => Get.height - 240 + expandedCircleRadius;
+  /// 圆环最终位置（用于动画终点）：圆心Y = 屏幕高度 + 400 - 240 + 80
+  double get finalCircleCenterY => Get.height + 400 - 240 + 80;
+
+  /// 扇形圆心Y（固定值，不受动画调整影响）
+  double get fanCircleCenterY => Get.height + 400 - 240;
 
   /// 圆环初始中心Y（屏幕正中央）
   double get initialCircleCenterY => Get.height / 2;
@@ -1440,8 +1442,8 @@ class _FanCardViewState extends State<_FanCardView>
     final screenW = MediaQuery.of(context).size.width;
     final allCards = controller.fanDisplayCards;
     final remaining = controller.remainingCards;
-    // 圆心位置
-    final circleCenterY = controller.savedOffsetY;
+    // 圆心位置（使用固定的扇形圆心Y，不受动画调整影响）
+    final circleCenterY = controller.fanCircleCenterY;
 
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
@@ -1476,10 +1478,11 @@ class _FanCardViewState extends State<_FanCardView>
             final baseAngle = (2 * pi * i / allCards.length) - pi / 2;
             final angle = baseAngle + controller.circleRotation.value;
             final scale = controller.savedScale;
-            final offsetY = controller.savedOffsetY;
+            // 使用固定的扇形圆心Y
+            final circleCenterY = controller.fanCircleCenterY;
 
             final x = screenW / 2 + cos(angle) * scale;
-            final y = offsetY + sin(angle) * scale;
+            final y = circleCenterY + sin(angle) * scale;
 
             // 旋转角度：卡牌指向圆心
             final rotation = angle + pi / 2;
