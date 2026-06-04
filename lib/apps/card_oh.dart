@@ -1093,7 +1093,7 @@ class _DrawnCardsBar extends StatelessWidget {
   Widget build(BuildContext context) {
     if (isEmpty) {
       return Container(
-        height: 70,
+        height: 80,
         color: const Color(0xFFB2DFDB).withValues(alpha: 0.5),
         child: const Center(
           child: Text(
@@ -1105,11 +1105,11 @@ class _DrawnCardsBar extends StatelessWidget {
     }
 
     return Container(
-      height: 70,
+      height: 80,
       color: const Color(0xFFB2DFDB).withValues(alpha: 0.9),
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
         itemCount: controller.drawnCardSets.length,
         itemBuilder: (context, index) {
           final cards = controller.drawnCardSets[index];
@@ -1818,9 +1818,9 @@ class _ViewingCardsViewState extends State<_ViewingCardsView> {
     const cardW = CardohCtrl.maxCardW;  // 300
     const cardH = CardohCtrl.maxCardH;  // 400
 
-    // 居中位置
+    // 居中位置，向上偏移160px
     final baseX = (screenSize.width - cardW) / 2;
-    final baseY = (screenSize.height - cardH) / 2;
+    final baseY = (screenSize.height - cardH) / 2 - 160;
 
     // 加上拖动偏移
     final finalX = baseX + _offsetX;
@@ -1894,7 +1894,7 @@ class _ViewingCardsViewState extends State<_ViewingCardsView> {
     final gridW = cardW * 2 + spacing;
     final gridH = cardH * 2 + spacing;
     final startX = (screenSize.width - gridW) / 2;
-    final startY = (screenSize.height - gridH) / 2;
+    final startY = (screenSize.height - gridH) / 2 - 160;
 
     // 2x2位置
     final positions = [
