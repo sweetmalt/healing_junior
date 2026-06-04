@@ -194,8 +194,10 @@ class CardohCtrl extends GetxController {
 
   /// 点击扇形中的卡
   void onFanCardTap(int cardId, Offset cardCenter) {
-    if (phase.value != CardohPhase.fan || isFlying.value) return;
+    // 只要不在飞行动画中，就可以抽卡（无论是 fan 还是 viewing 阶段）
+    if (isFlying.value) return;
     if (remainingCards.isEmpty) return;
+    if (!remainingCards.contains(cardId)) return; // 确保这张卡还在剩余卡里
 
     // 记录飞行起点（不立即移除卡牌，等飞行完成后再移除）
     flyStartPositions.clear();
@@ -997,70 +999,6 @@ class _ShufflePainter extends CustomPainter {
   }
 }
 
-/// 静态环形牌阵画家（洗牌动画完成后显示）
-class _StaticCirclePainter extends CustomPainter {
-  final double scale;           // 半径
-  final double offsetY;         // 圆心Y位置
-  final double cardW;           // 卡牌宽度
-  final double cardH;           // 卡牌高度
-  final double centerX;          // 屏幕中心X
-  final List<int> remainingCards; // 剩余卡牌
-
-  _StaticCirclePainter({
-    required this.scale,
-    required this.offsetY,
-    required this.cardW,
-    required this.cardH,
-    required this.centerX,
-    required this.remainingCards,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final total = remainingCards.length;
-    final angleStep = 2 * pi / total;
-
-    for (int i = 0; i < total; i++) {
-      final angle = angleStep * i - pi / 2;
-      final x = centerX + cos(angle) * scale;
-      final y = offsetY + sin(angle) * scale;
-
-      // 绘制卡牌背面（统一深色）
-      final rect = Rect.fromCenter(
-        center: Offset(x, y),
-        width: cardW,
-        height: cardH,
-      );
-
-      final paint = Paint()
-        ..color = const Color(0xFF3A3462)
-        ..style = PaintingStyle.fill;
-
-      // 卡牌旋转：指向圆心
-      canvas.save();
-      canvas.translate(x, y);
-      canvas.rotate(angle + pi / 2);
-      canvas.translate(-x, -y);
-
-      final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(6));
-      canvas.drawRRect(rrect, paint);
-
-      final borderPaint = Paint()
-        ..color = Colors.white.withValues(alpha: 0.3)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1;
-      canvas.drawRRect(rrect, borderPaint);
-
-      canvas.restore();
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _StaticCirclePainter oldDelegate) {
-    return false;  // 静态显示，不需要重绘
-  }
-}
-
 /// 环形上的单张卡
 class _CircleCard extends StatelessWidget {
   final int deckType;
@@ -1127,31 +1065,18 @@ class _MainContent extends StatelessWidget {
               }),
               // 查看已抽卡（顶层）
               Obx(() {
-                if (controller.phase.value != CardohPhase.viewing) {
+                // 必须等飞行动画结束后才显示
+                if (controller.phase.value != CardohPhase.viewing || controller.isFlying.value) {
                   return const SizedBox.shrink();
                 }
+                // 必须引用这些变量以确保 Obx 监听它们的变化
+                controller.currentCards.length;
+                controller.selectedCardIndex.value;
                 return _ViewingCardsView(controller: controller);
               }),
             ],
           ),
         ),
-        // AI对话入口
-        Obx(() {
-          if (controller.phase.value == CardohPhase.viewing) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: TextButton.icon(
-                onPressed: controller.showAIDialog,
-                icon: const Icon(Icons.chat_bubble_outline, color: Color(0xFF4DB6AC), size: 18),
-                label: const Text(
-                  'AI疗愈对话',
-                  style: TextStyle(color: Color(0xFF4DB6AC), fontSize: 14),
-                ),
-              ),
-            );
-          }
-          return const SizedBox.shrink();
-        }),
       ],
     );
   }
@@ -1318,6 +1243,10 @@ class _FanCardViewState extends State<_FanCardView>
   late PageController _pageController;
   late AnimationController _entryAnimCtrl;
 
+  // 旋转相关状态
+  double _lastAngle = 0.0;
+  bool _isDragging = false;
+
   @override
   void initState() {
     super.initState();
@@ -1336,74 +1265,110 @@ class _FanCardViewState extends State<_FanCardView>
     super.dispose();
   }
 
+  /// 计算手指相对于圆心的角度（使用全局坐标）
+  double _computeAngle(Offset globalPosition, Offset circleCenter) {
+    final dx = globalPosition.dx - circleCenter.dx;
+    final dy = globalPosition.dy - circleCenter.dy;
+    return atan2(dy, dx);
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
 
-    // 使用 Obx 监听状态变化
+    // 扇形区域始终保持可交互
+    // 已抽的卡已经在各自的构建方法中被设置为透明+不可点击
+    // 注意：必须监听 remainingCards 否则抽卡后UI不会更新
     return Obx(() {
-      // viewing 阶段半透明且不可交互
-      final isViewing = controller.phase.value == CardohPhase.viewing;
-
+      // 引用 remainingCards 和 circleRotation 以确保 Obx 能监听它们的变化
+      // ignore: unnecessary_statements - 这些引用用于强制监听
+      controller.remainingCards.length;
+      controller.circleRotation.value;
       final content = controller.hasSavedCircleState.value
           ? _buildCircleView(controller)
           : _buildFanView(controller);
 
-      return Opacity(
-        opacity: isViewing ? 0.3 : 1.0,
-        child: IgnorePointer(
-          ignoring: isViewing,
-          child: content,
-        ),
-      );
+      return content;
     });
   }
 
   Widget _buildCircleView(CardohCtrl controller) {
     final screenW = MediaQuery.of(context).size.width;
+    final allCards = controller.fanDisplayCards;
+    final remaining = controller.remainingCards;
+    // 圆心位置
+    final circleCenterY = controller.savedOffsetY;
 
-    return Stack(
-      children: [
-        // 背景透明区域，可接受滑动
-        GestureDetector(
-          onHorizontalDragUpdate: (details) {
-            // 处理左右滑动旋转环形
-          },
-        ),
-        // 环形上的卡牌
-        ...List.generate(controller.remainingCards.length, (i) {
-          final total = controller.remainingCards.length;
-          final angle = (2 * pi * i / total) - pi / 2;
-          final scale = controller.savedScale;
-          final offsetY = controller.savedOffsetY;
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onPanStart: (details) {
+        // 计算手指位置相对于圆心的角度
+        final globalPos = details.globalPosition;
+        final circleCenter = Offset(screenW / 2, circleCenterY);
+        _lastAngle = _computeAngle(globalPos, circleCenter);
+        _isDragging = true;
+      },
+      onPanUpdate: (details) {
+        if (!_isDragging) return;
+        final globalPos = details.globalPosition;
+        final circleCenter = Offset(screenW / 2, circleCenterY);
+        final currentAngle = _computeAngle(globalPos, circleCenter);
+        final delta = currentAngle - _lastAngle;
+        controller.circleRotation.value += delta;
+        _lastAngle = currentAngle;
+      },
+      onPanEnd: (_) {
+        _isDragging = false;
+      },
+      child: Stack(
+        children: [
+          // 环形上的卡牌（基于 fanDisplayCards，显示所有卡）
+          ...List.generate(allCards.length, (i) {
+            final cardId = allCards[i];
+            final isDrawn = !remaining.contains(cardId);
+            final total = allCards.length;
+            // 基础角度 + 旋转偏移
+            final baseAngle = (2 * pi * i / total) - pi / 2;
+            final angle = baseAngle + controller.circleRotation.value;
+            final scale = controller.savedScale;
+            final offsetY = controller.savedOffsetY;
 
-          final x = screenW / 2 + cos(angle) * scale;
-          final y = offsetY + sin(angle) * scale;
+            final x = screenW / 2 + cos(angle) * scale;
+            final y = offsetY + sin(angle) * scale;
 
-          // 旋转角度：卡牌指向圆心
-          final rotation = angle + pi / 2;
+            // 旋转角度：卡牌指向圆心
+            final rotation = angle + pi / 2;
 
-          return Positioned(
-            left: x - controller.savedCardW / 2,
-            top: y - controller.savedCardH / 2,
-            child: GestureDetector(
-              onTap: () {
-                // 获取卡牌中心位置
-                final cardCenter = Offset(x, y);
-                controller.onFanCardTap(controller.remainingCards[i], cardCenter);
-              },
-              child: Transform.rotate(
-                angle: rotation,
-                child: _CircleCard(
-                  deckType: controller.selectedDeck.value ?? 1,
-                  cardW: controller.savedCardW,
-                  cardH: controller.savedCardH,
+            return Positioned(
+              left: x - controller.savedCardW / 2,
+              top: y - controller.savedCardH / 2,
+              child: IgnorePointer(
+                ignoring: isDrawn,
+                child: Opacity(
+                  opacity: isDrawn ? 0.0 : 1.0,
+                  child: GestureDetector(
+                    onTap: isDrawn
+                        ? null
+                        : () {
+                            // 获取卡牌中心位置
+                            final cardCenter = Offset(x, y);
+                            controller.onFanCardTap(cardId, cardCenter);
+                          },
+                    child: Transform.rotate(
+                      angle: rotation,
+                      child: _CircleCard(
+                        deckType: controller.selectedDeck.value ?? 1,
+                        cardW: controller.savedCardW,
+                        cardH: controller.savedCardH,
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
-          );
-        }),
-      ],
+            );
+          }),
+        ],
+      ),
     );
   }
 
@@ -1620,49 +1585,52 @@ class _FlyingCardsViewState extends State<_FlyingCardsView>
 
   @override
   Widget build(BuildContext context) {
-    final cards = widget.controller.currentCards;
-    final starts = widget.controller.flyStartPositions;
-    final screenSize = MediaQuery.of(context).size;
-    final flyProgress = widget.controller.flyProgress.value;
-    final cardCount = cards.length;
+    // 使用 Obx 监听 flyProgress 变化，触发重建
+    return Obx(() {
+      final cards = widget.controller.currentCards;
+      final starts = widget.controller.flyStartPositions;
+      final screenSize = MediaQuery.of(context).size;
+      final flyProgress = widget.controller.flyProgress.value;
+      final cardCount = cards.length;
 
-    // 目标位置：屏幕中心
-    final targetX = screenSize.width / 2 - CardohCtrl.fanCardW / 2;
-    final targetY = screenSize.height / 2 - CardohCtrl.fanCardH / 2;
+      // 目标位置：屏幕中心
+      final targetX = screenSize.width / 2 - CardohCtrl.fanCardW / 2;
+      final targetY = screenSize.height / 2 - CardohCtrl.fanCardH / 2;
 
-    return Stack(
-      children: List.generate(cardCount, (index) {
-        if (index >= starts.length) return const SizedBox.shrink();
+      return Stack(
+        children: List.generate(cardCount, (index) {
+          if (index >= starts.length) return const SizedBox.shrink();
 
-        // 交错动画：每张卡延迟
-        final delay = index * 0.1;
-        final cardProgress = ((flyProgress - delay) / (1 - delay)).clamp(0.0, 1.0);
-        final eased = Curves.easeOut.transform(cardProgress);
+          // 交错动画：每张卡延迟
+          final delay = index * 0.1;
+          final cardProgress = ((flyProgress - delay) / (1 - delay)).clamp(0.0, 1.0);
+          final eased = Curves.easeOut.transform(cardProgress);
 
-        final startPos = starts[index];
-        final x = startPos.dx + (targetX - startPos.dx) * eased;
-        final y = startPos.dy + (targetY - startPos.dy) * eased;
+          final startPos = starts[index];
+          final x = startPos.dx + (targetX - startPos.dx) * eased;
+          final y = startPos.dy + (targetY - startPos.dy) * eased;
 
-        // 缩放动画
-        final scale = 1.0 + 0.5 * eased;
+          // 缩放动画
+          final scale = 1.0 + 0.5 * eased;
 
-        // 翻牌动画：在飞行后期进行（当 eased > 0.5 时开始翻）
-        final flipProgress = ((eased - 0.5) / 0.5).clamp(0.0, 1.0);
+          // 翻牌动画：在飞行后期进行（当 eased > 0.5 时开始翻）
+          final flipProgress = ((eased - 0.5) / 0.5).clamp(0.0, 1.0);
 
-        return Positioned(
-          left: x,
-          top: y,
-          child: Transform.scale(
-            scale: scale,
-            child: _FlyingCard(
-              cardId: cards[index],
-              deckType: widget.controller.selectedDeck.value ?? 1,
-              flipProgress: flipProgress,
+          return Positioned(
+            left: x,
+            top: y,
+            child: Transform.scale(
+              scale: scale,
+              child: _FlyingCard(
+                cardId: cards[index],
+                deckType: widget.controller.selectedDeck.value ?? 1,
+                flipProgress: flipProgress,
+              ),
             ),
-          ),
-        );
-      }),
-    );
+          );
+        }),
+      );
+    });
   }
 }
 
@@ -1815,71 +1783,70 @@ class _ViewingCardsViewState extends State<_ViewingCardsView> {
     final finalX = baseX + _offsetX;
     final finalY = baseY + _offsetY;
 
-    return GestureDetector(
-      onScaleStart: (details) {
-        _basePinchScale = _pinchScale;
-      },
-      onScaleUpdate: (details) {
-        setState(() {
-          _pinchScale = (_basePinchScale * details.scale).clamp(1.0, 2.5);
-          _offsetX += details.focalPointDelta.dx;
-          _offsetY += details.focalPointDelta.dy;
-        });
-      },
-      onTapUp: (details) {
-        // 点击卡牌：放大/缩小切换
-        setState(() {
-          if (_pinchScale > 1.1) {
-            _pinchScale = 1.0;
-            _basePinchScale = 1.0;
-            _offsetX = 0.0;
-            _offsetY = 0.0;
-          } else {
-            _pinchScale = 2.0; // 直接放大到2倍
-          }
-        });
-      },
-      child: Container(
-        color: Colors.transparent,
-        child: Stack(
-          children: [
-            Positioned(
-              left: finalX,
-              top: finalY,
-              child: Container(
-                width: currentW,
-                height: currentH,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.4),
-                      blurRadius: 30,
-                      offset: const Offset(5, 10),
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.asset(
-                    'assets/images/card_oh/$deckType/${cardId.toString().padLeft(2, '0')}.jpg',
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
-                      color: Colors.grey[400],
-                      child: Center(
-                        child: Text(
-                          cardId.toString(),
-                          style: const TextStyle(color: Colors.white, fontSize: 32),
-                        ),
+    // 只在图片区域响应手势
+    return Stack(
+      children: [
+        // 图片本身
+        Positioned(
+          left: finalX,
+          top: finalY,
+          child: GestureDetector(
+            onScaleStart: (details) {
+              _basePinchScale = _pinchScale;
+            },
+            onScaleUpdate: (details) {
+              setState(() {
+                _pinchScale = (_basePinchScale * details.scale).clamp(1.0, 2.5);
+                _offsetX += details.focalPointDelta.dx;
+                _offsetY += details.focalPointDelta.dy;
+              });
+            },
+            onTapUp: (details) {
+              // 点击卡牌：放大/缩小切换
+              setState(() {
+                if (_pinchScale > 1.1) {
+                  _pinchScale = 1.0;
+                  _basePinchScale = 1.0;
+                  _offsetX = 0.0;
+                  _offsetY = 0.0;
+                } else {
+                  _pinchScale = 2.0;
+                }
+              });
+            },
+            child: Container(
+              width: currentW,
+              height: currentH,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.4),
+                    blurRadius: 30,
+                    offset: const Offset(5, 10),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.asset(
+                  'assets/images/card_oh/$deckType/${cardId.toString().padLeft(2, '0')}.jpg',
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    color: Colors.grey[400],
+                    child: Center(
+                      child: Text(
+                        cardId.toString(),
+                        style: const TextStyle(color: Colors.white, fontSize: 32),
                       ),
                     ),
                   ),
                 ),
               ),
             ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 
@@ -1888,37 +1855,29 @@ class _ViewingCardsViewState extends State<_ViewingCardsView> {
     final cardCount = cards.length;
     final crossAxisCount = cardCount <= 2 ? cardCount : 2;
 
-    return GestureDetector(
-      onTapUp: (details) {
-        // 点击空白区域不响应（由子卡片处理）
-      },
-      child: Container(
-        color: Colors.transparent,
-        child: Stack(
-          children: [
-            // 网格视图
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: crossAxisCount,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
-                    childAspectRatio: CardohCtrl.fanCardW / CardohCtrl.fanCardH,
-                  ),
-                  itemCount: cards.length,
-                  itemBuilder: (context, index) {
-                    return _buildGridCard(cards[index], deckType, index);
-                  },
-                ),
+    return Stack(
+      children: [
+        // 网格视图
+        Center(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: crossAxisCount,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                childAspectRatio: CardohCtrl.fanCardW / CardohCtrl.fanCardH,
               ),
+              itemCount: cards.length,
+              itemBuilder: (context, index) {
+                return _buildGridCard(cards[index], deckType, index);
+              },
             ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 
