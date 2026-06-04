@@ -2206,21 +2206,21 @@ class _FloatingToolbar extends StatelessWidget {
           tooltip: '设置',
           onTap: () => controller.showSettingsDialog(),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 24),
         // 卡组选择（始终可用，切换卡组相当于重新开始）
         _ToolbarButton(
           icon: Icons.layers,
           tooltip: '卡组选择',
           onTap: () => controller.switchDeck(),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 24),
         // 重新开始（始终可用）
         _ToolbarButton(
           icon: Icons.refresh,
           tooltip: '重新开始',
           onTap: () => _showResetConfirm(context),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 24),
         // 洗牌（只在扇形阶段可用）
         Obx(() {
           final isDisabled = controller.phase.value != CardohPhase.fan;
@@ -2231,7 +2231,7 @@ class _FloatingToolbar extends StatelessWidget {
             onTap: () => controller.startShuffle(),
           );
         }),
-        const SizedBox(height: 12),
+        const SizedBox(height: 24),
         // 四卡连抽（扇形/查看阶段且剩余卡>=4）
         Obx(() {
           final canDraw = controller.remainingCards.length >= 4 &&
@@ -2340,18 +2340,18 @@ class _ToolbarButton extends StatelessWidget {
       preferBelow: false,
       child: InkWell(
         onTap: enabled ? onTap : null,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(30),
         child: Container(
-          width: 40,
-          height: 40,
+          width: 60,
+          height: 60,
           decoration: BoxDecoration(
             color: enabled ? Colors.white : Colors.white24,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(30),
           ),
           child: Icon(
             icon,
             color: enabled ? const Color(0xFF4DB6AC) : Colors.white38,
-            size: 22,
+            size: 30,
           ),
         ),
       ),
