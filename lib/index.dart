@@ -38,11 +38,12 @@ class IndexView extends StatelessWidget {
           )),
       bottomNavigationBar: Obx(() => BottomNavigationBar(
             selectedFontSize: 16,
+            unselectedFontSize: 16,
             selectedItemColor: Colors.purple,
             unselectedItemColor: Colors.grey,
             currentIndex: controller.index.value,
-            showSelectedLabels:true,
-            showUnselectedLabels:true,
+            showSelectedLabels: true,
+            showUnselectedLabels: true,
             onTap: controller.updateIndex,
             items: [
               BottomNavigationBarItem(icon: Icon(Icons.child_care_rounded), label: '欢迎'),
@@ -92,8 +93,7 @@ class _RecordingIndicator extends StatefulWidget {
   State<_RecordingIndicator> createState() => _RecordingIndicatorState();
 }
 
-class _RecordingIndicatorState extends State<_RecordingIndicator>
-    with SingleTickerProviderStateMixin {
+class _RecordingIndicatorState extends State<_RecordingIndicator> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _animation;
 
@@ -160,7 +160,7 @@ class IndexCtrl extends GetxController {
 /// 健壮性: 录音/识别中断时自动重连恢复
 class VolcASRService {
   static const String _wsUrl = 'wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async';
-  static const String _apiKey = '10fcdf7f-d97d-4e4a-a0a1-6cbf628926d3';
+  static const String _apiKey = '549a8a0a-3b6a-4a17-a1bc-8c0aa7ac0808';
 
   WebSocket? _ws;
   AudioRecorder? _recorder;
@@ -323,18 +323,21 @@ class VolcASRService {
     }
 
     final config = {
+      'app': {
+        'appid': '',
+        'cluster': 'volcengine_streaming_common',
+      },
       'user': {'uid': 'user_$_requestId'},
       'audio': {'format': 'pcm', 'rate': 16000, 'bits': 16, 'channel': 1, 'codec': 'raw'},
       'request': {
         'reqid': _requestId,
-        'model_name': 'bigmodel',
         'sequence': -1,
         'language': 'zh-CN',
         'enable_partial': true,
         'enable_punc': true,
-        'enable_nonstream': true,
-        'enable_speaker_info': true,
-        'ssd_version': '300',
+        'enable_nonstream': true,      // 开启二遍识别（说话人分离必需）
+        'enable_speaker_info': true,  // 启用说话人聚类分离
+        'ssd_version': '200',          // 大模型SSD能力
       },
     };
 
@@ -501,8 +504,8 @@ class SpeakerRoleInfo {
 
 /// 报告文件信息
 class ReportInfo {
-  final String fileName;   // 文件名（不含路径）
-  final String title;      // 显示标题
+  final String fileName; // 文件名（不含路径）
+  final String title; // 显示标题
   final DateTime createdAt;
 
   ReportInfo({
@@ -536,7 +539,7 @@ class ProcessedDialogEntry {
 // ==================== Coze 提示问题生成 ====================
 
 /// Coze提示问题生成服务
-/// 
+///
 /// Coze Agent 提示词设计：
 /// - 仅输出一个问题字符串（≤30字）
 /// - 四类问题：感受探索、深入挖掘、关联链接、行动引导
@@ -659,7 +662,7 @@ class CozeHintService {
 // ==================== Coze 疗愈报告生成 ====================
 
 /// Coze疗愈报告生成服务
-/// 
+///
 /// 输入：
 /// - 疗愈师姓名、来访者姓名、对话日期
 /// - 原始对话记录
@@ -822,9 +825,9 @@ class AIDialogCtrl extends GetxController {
   final Set<String> _shownHints = {};
 
   // ========== 报告相关 ==========
-  final reportList = <ReportInfo>[].obs;  // 已存储的报告列表
-  final isGeneratingReport = false.obs;     // 是否正在生成报告
-  final _showReportButton = false.obs;   // 是否显示"生成报告"按钮
+  final reportList = <ReportInfo>[].obs; // 已存储的报告列表
+  final isGeneratingReport = false.obs; // 是否正在生成报告
+  final _showReportButton = false.obs; // 是否显示"生成报告"按钮
 
   // ========== 说话人分析 ==========
   final Map<int, SpeakerRoleInfo> _speakerInfos = {};
@@ -1051,7 +1054,7 @@ class AIDialogCtrl extends GetxController {
     try {
       final dir = await _getReportDirectory();
       final files = await dir.list().toList();
-      
+
       final reports = <ReportInfo>[];
       for (final entity in files) {
         if (entity is File && entity.path.endsWith('.md')) {
@@ -1070,7 +1073,7 @@ class AIDialogCtrl extends GetxController {
           } catch (_) {
             title = '匿名';
           }
-          
+
           final stat = await entity.stat();
           reports.add(ReportInfo(
             fileName: fileName,
@@ -1079,7 +1082,7 @@ class AIDialogCtrl extends GetxController {
           ));
         }
       }
-      
+
       // 按时间倒序排列，最新的在最前面
       reports.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       reportList.assignAll(reports);
@@ -1107,15 +1110,11 @@ class AIDialogCtrl extends GetxController {
       String clientName = '来访者';
       try {
         final employeeCtrl = Get.find<EmployeeCtrl>();
-        therapistName = employeeCtrl.nickname.value.isNotEmpty 
-            ? employeeCtrl.nickname.value 
-            : '疗愈师';
+        therapistName = employeeCtrl.nickname.value.isNotEmpty ? employeeCtrl.nickname.value : '疗愈师';
       } catch (_) {}
       try {
         final customerCtrl = Get.find<CustomerCtrl>();
-        clientName = customerCtrl.nickname.value.isNotEmpty 
-            ? customerCtrl.nickname.value 
-            : '来访者';
+        clientName = customerCtrl.nickname.value.isNotEmpty ? customerCtrl.nickname.value : '来访者';
       } catch (_) {}
 
       // 构建对话内容
@@ -1125,16 +1124,14 @@ class AIDialogCtrl extends GetxController {
       }).join('\n');
 
       // 限制字数：超过5000字时只取最新5000字（越到最后的内容越有价值）
-      final limitedContent = dialogContent.length > 5000
-          ? dialogContent.substring(dialogContent.length - 5000)
-          : dialogContent;
+      final limitedContent = dialogContent.length > 5000 ? dialogContent.substring(dialogContent.length - 5000) : dialogContent;
 
       // 显示"正在生成"的提示（不自动消失）
       Get.snackbar(
-        '提示', 
-        '正在生成报告...', 
-        snackPosition: SnackPosition.BOTTOM, 
-        duration: const Duration(hours: 1),  // 长时间显示，直到手动关闭
+        '提示',
+        '正在生成报告...',
+        snackPosition: SnackPosition.BOTTOM,
+        duration: const Duration(hours: 1), // 长时间显示，直到手动关闭
         showProgressIndicator: true,
       );
 
@@ -1148,7 +1145,7 @@ class AIDialogCtrl extends GetxController {
 
       if (markdown.isEmpty) {
         isGeneratingReport.value = false;
-        Get.closeCurrentSnackbar();  // 关闭"正在生成"提示
+        Get.closeCurrentSnackbar(); // 关闭"正在生成"提示
         Get.snackbar('错误', '报告生成失败，请重试', snackPosition: SnackPosition.BOTTOM);
         return false;
       }
@@ -1160,7 +1157,7 @@ class AIDialogCtrl extends GetxController {
       await _loadReportList();
 
       isGeneratingReport.value = false;
-      Get.closeCurrentSnackbar();  // 关闭"正在生成"提示
+      Get.closeCurrentSnackbar(); // 关闭"正在生成"提示
       Get.snackbar('成功', '报告已生成', snackPosition: SnackPosition.BOTTOM);
       return true;
     } catch (e) {
@@ -1176,7 +1173,8 @@ class AIDialogCtrl extends GetxController {
     try {
       final dir = await _getReportDirectory();
       final now = DateTime.now();
-      final dateStr = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}';
+      final dateStr =
+          '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}';
       // 使用顾客昵称，如果没有则显示"匿名"
       final displayName = (clientName.isEmpty || clientName == '来访者') ? '匿名' : clientName;
       final fileName = 'card_oh_report_${displayName}_$dateStr.md';
@@ -1219,7 +1217,7 @@ class AIDialogCtrl extends GetxController {
       final pdfFileName = fileName.replaceAll('.md', '.pdf');
       final pdfFile = File('${dir.path}/$pdfFileName');
       await pdfFile.writeAsBytes(await pdf.save());
-      
+
       // ignore: avoid_print
       return pdfFile;
     } catch (e) {
@@ -1262,7 +1260,7 @@ class AIDialogCtrl extends GetxController {
   List<pw.Widget> _parseMarkdownToPdf(String markdown) {
     final List<pw.Widget> widgets = [];
     final lines = markdown.split('\n');
-    
+
     for (final line in lines) {
       if (line.isEmpty) {
         widgets.add(pw.SizedBox(height: 8));
@@ -1462,9 +1460,7 @@ class AIDialogCtrl extends GetxController {
     }).join('\n');
 
     // 文本字数限制：超过500字时只取最新500字
-    final truncated = conversation.length > 500
-        ? conversation.substring(conversation.length - 500)
-        : conversation;
+    final truncated = conversation.length > 500 ? conversation.substring(conversation.length - 500) : conversation;
 
     // 调用Coze生成提示问题（Bot内部已做去重）
     final question = await CozeHintService.generateHint(
@@ -1768,7 +1764,7 @@ class _AIDialogContent extends StatelessWidget {
               final aiCtrl = Get.find<AIDialogCtrl>();
               final recording = aiCtrl.isRecording.value;
               final isGenerating = aiCtrl.isGeneratingReport.value;
-              
+
               return Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -1778,7 +1774,7 @@ class _AIDialogContent extends StatelessWidget {
                       padding: const EdgeInsets.only(right: 12),
                       child: ElevatedButton.icon(
                         onPressed: aiCtrl.generateReport,
-                        icon: isGenerating 
+                        icon: isGenerating
                             ? const SizedBox(
                                 width: 16,
                                 height: 16,
@@ -1796,7 +1792,7 @@ class _AIDialogContent extends StatelessWidget {
                         ),
                       ),
                     ),
-                  
+
                   // 录音按钮
                   if (!recording)
                     ElevatedButton.icon(
@@ -1824,7 +1820,7 @@ class _AIDialogContent extends StatelessWidget {
               );
             }),
           ),
-          
+
           // ========== 报告抽屉区 ==========
           _buildReportsDrawer(ctrl),
         ],

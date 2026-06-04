@@ -6,10 +6,10 @@ import 'package:get/get.dart';
 /// 阶段枚举
 /// ============================================================
 enum CardohPhase {
-  select,    // 选择卡组
+  select, // 选择卡组
   shuffling, // 洗牌动画
-  fan,       // 扇形浏览/抽卡
-  viewing,   // 查看已抽卡
+  fan, // 扇形浏览/抽卡
+  viewing, // 查看已抽卡
 }
 
 /// ============================================================
@@ -142,8 +142,8 @@ class CardohCtrl extends GetxController {
   static const double circleExpandScale = 1.5;
 
   /// 卡牌尺寸
-  static const double thumbW = 60.0;   // 缩略图宽度
-  static const double thumbH = 80.0;   // 缩略图高度
+  static const double thumbW = 60.0; // 缩略图宽度
+  static const double thumbH = 80.0; // 缩略图高度
   static const double fanCardW = 120.0; // 扇形卡宽度
   static const double fanCardH = 160.0; // 扇形卡高度
   static const double maxCardW = 300.0; // 放大最大宽度
@@ -354,11 +354,11 @@ class CardohCtrl extends GetxController {
     flyStartPositions.clear();
     isFlying.value = false;
     flyProgress.value = 0.0;
-    
+
     // 重建剩余卡（所有卡都可抽）
     final drawnIds = <int>{};
     remainingCards.value = fanDisplayCards.where((id) => !drawnIds.contains(id)).toList();
-    
+
     // 回到整齐堆叠状态，和初始选择卡组后一样
     phase.value = CardohPhase.select;
   }
@@ -399,28 +399,28 @@ class CardohCtrl extends GetxController {
               const SizedBox(height: 16),
               // 包含特殊卡开关
               Obx(() => Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFF80CBC4)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('包含特殊卡', style: TextStyle(color: Color(0xFF2A2A4E), fontSize: 14)),
-                    const SizedBox(width: 8),
-                    Switch(
-                      value: includeSpecial.value,
-                      onChanged: (v) {
-                        includeSpecial.value = v;
-                        _rebuildCards();
-                      },
-                      activeTrackColor: const Color(0xFF80CBC4),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFF80CBC4)),
                     ),
-                  ],
-                ),
-              )),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('包含特殊卡', style: TextStyle(color: Color(0xFF2A2A4E), fontSize: 14)),
+                        const SizedBox(width: 8),
+                        Switch(
+                          value: includeSpecial.value,
+                          onChanged: (v) {
+                            includeSpecial.value = v;
+                            _rebuildCards();
+                          },
+                          activeTrackColor: const Color(0xFF80CBC4),
+                        ),
+                      ],
+                    ),
+                  )),
               const SizedBox(height: 16),
               // 关闭按钮
               TextButton(
@@ -487,12 +487,9 @@ class CardohCtrl extends GetxController {
               // 基础卡选项（动态显示卡数量）
               Obx(() {
                 final isBase = selectedDeck.value == 1;
-                final baseCount = isBase
-                    ? (includeSpecial.value ? baseDeckCount : baseDeckCount - specialCardIds.length)
-                    : baseDeckCount - specialCardIds.length;
-                final subtitle = isBase
-                    ? (includeSpecial.value ? '共 $baseDeckCount 张（含特殊卡）' : '共 $baseCount 张（不含特殊卡）')
-                    : '共 $baseCount 张（不含特殊卡）';
+                final baseCount =
+                    isBase ? (includeSpecial.value ? baseDeckCount : baseDeckCount - specialCardIds.length) : baseDeckCount - specialCardIds.length;
+                final subtitle = isBase ? (includeSpecial.value ? '共 $baseDeckCount 张（含特殊卡）' : '共 $baseCount 张（不含特殊卡）') : '共 $baseCount 张（不含特殊卡）';
                 return _DeckOption(
                   title: '基础卡',
                   subtitle: subtitle,
@@ -506,14 +503,14 @@ class CardohCtrl extends GetxController {
               const SizedBox(height: 12),
               // 复原卡选项
               Obx(() => _DeckOption(
-                title: '复原卡',
-                subtitle: '共 $recoveryDeckCount 张',
-                selected: selectedDeck.value == 2,
-                onTap: () {
-                  Get.back();
-                  selectDeck(2); // 清空一切，回到整齐堆叠状态
-                },
-              )),
+                    title: '复原卡',
+                    subtitle: '共 $recoveryDeckCount 张',
+                    selected: selectedDeck.value == 2,
+                    onTap: () {
+                      Get.back();
+                      selectDeck(2); // 清空一切，回到整齐堆叠状态
+                    },
+                  )),
               const SizedBox(height: 20),
               TextButton(
                 onPressed: () => Get.back(),
@@ -724,11 +721,9 @@ class _StackedCardsView extends StatelessWidget {
         children: [
           // 显示整齐堆叠的卡牌（可点击）
           Obx(() => GestureDetector(
-            onTap: controller.selectedDeck.value != null
-                ? () => controller.startShuffle()
-                : null,
-            child: _buildStackedDeck(),
-          )),
+                onTap: controller.selectedDeck.value != null ? () => controller.startShuffle() : null,
+                child: _buildStackedDeck(),
+              )),
           const SizedBox(height: 32),
           // 提示文字
           Obx(() {
@@ -762,7 +757,7 @@ class _StackedCardsView extends StatelessWidget {
     // 根据选择的卡组显示对应数量的堆叠
     final deckType = controller.selectedDeck.value!;
     final cardCount = controller.fanDisplayCards.isEmpty
-        ? 12  // 首次进入时显示默认堆叠
+        ? 12 // 首次进入时显示默认堆叠
         : (controller.fanDisplayCards.length > 20 ? 20 : controller.fanDisplayCards.length);
     return _buildCardStack(deckType, cardCount);
   }
@@ -824,14 +819,13 @@ class _ShufflePage extends StatefulWidget {
   State<_ShufflePage> createState() => _ShufflePageState();
 }
 
-class _ShufflePageState extends State<_ShufflePage>
-    with TickerProviderStateMixin {
-  late AnimationController _shuffleCtrl;   // 洗牌散开动画
-  late AnimationController _moveCtrl;     // 环形移动动画（3秒）
-  late Animation<double> _scaleAnim;      // 放大动画
-  late Animation<double> _offsetYAnim;    // 下移动画
-  late Animation<double> _cardWAnim;      // 卡牌宽度动画
-  late Animation<double> _cardHAnim;      // 卡牌高度动画
+class _ShufflePageState extends State<_ShufflePage> with TickerProviderStateMixin {
+  late AnimationController _shuffleCtrl; // 洗牌散开动画
+  late AnimationController _moveCtrl; // 环形移动动画（3秒）
+  late Animation<double> _scaleAnim; // 放大动画
+  late Animation<double> _offsetYAnim; // 下移动画
+  late Animation<double> _cardWAnim; // 卡牌宽度动画
+  late Animation<double> _cardHAnim; // 卡牌高度动画
 
   late List<_CardTarget> _cardTargets;
 
@@ -970,8 +964,7 @@ class _ShufflePageState extends State<_ShufflePage>
         animation: Listenable.merge([_shuffleCtrl, _moveCtrl]),
         builder: (context, child) {
           return CustomPaint(
-            size: Size(MediaQuery.of(context).size.width,
-                MediaQuery.of(context).size.height),
+            size: Size(MediaQuery.of(context).size.width, MediaQuery.of(context).size.height),
             painter: _ShufflePainter(
               shuffleProgress: _shuffleCtrl.value,
               moveProgress: _moveCtrl.value,
@@ -992,13 +985,13 @@ class _ShufflePageState extends State<_ShufflePage>
 /// 单张卡牌的目标位置数据
 class _CardTarget {
   final int id;
-  final double startX;         // 飞行起点X（中心）
-  final double startY;         // 飞行起点Y（中心）
-  final double flyAngle;       // 飞行方向角度
-  final double flyDistance;    // 飞行距离（半径）
-  final double delay;          // 延迟开始动画的时间
+  final double startX; // 飞行起点X（中心）
+  final double startY; // 飞行起点Y（中心）
+  final double flyAngle; // 飞行方向角度
+  final double flyDistance; // 飞行距离（半径）
+  final double delay; // 延迟开始动画的时间
   final double initialRotation; // 初始旋转角度
-  final double finalRotation;   // 最终旋转角度（卡牌指向圆心）
+  final double finalRotation; // 最终旋转角度（卡牌指向圆心）
 
   _CardTarget({
     required this.id,
@@ -1014,14 +1007,14 @@ class _CardTarget {
 
 /// 洗牌动画画家
 class _ShufflePainter extends CustomPainter {
-  final double shuffleProgress;  // 散开进度 0.0~1.0
-  final double moveProgress;     // 移动进度 0.0~1.0
-  final double scale;           // 当前半径
-  final double offsetY;         // 圆心Y位置
-  final double cardW;           // 当前卡牌宽度
-  final double cardH;           // 当前卡牌高度
+  final double shuffleProgress; // 散开进度 0.0~1.0
+  final double moveProgress; // 移动进度 0.0~1.0
+  final double scale; // 当前半径
+  final double offsetY; // 圆心Y位置
+  final double cardW; // 当前卡牌宽度
+  final double cardH; // 当前卡牌高度
   final List<_CardTarget> cardTargets;
-  final double centerX;          // 屏幕中心X
+  final double centerX; // 屏幕中心X
 
   _ShufflePainter({
     required this.shuffleProgress,
@@ -1075,8 +1068,7 @@ class _ShufflePainter extends CustomPainter {
       final currentY = offsetY + targetY * curved;
 
       // 旋转角度：从初始角度插值到最终角度
-      final currentRotation = target.initialRotation +
-          (target.finalRotation - target.initialRotation) * curved;
+      final currentRotation = target.initialRotation + (target.finalRotation - target.initialRotation) * curved;
 
       // 绘制卡牌（统一深色背面）
       final rect = Rect.fromCenter(
@@ -1280,8 +1272,8 @@ class _CardSetThumbnail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const double w = CardohCtrl.thumbW;  // 60
-    const double h = CardohCtrl.thumbH;  // 80
+    const double w = CardohCtrl.thumbW; // 60
+    const double h = CardohCtrl.thumbH; // 80
 
     if (cardIds.length == 1) {
       // 单卡：显示完整缩略图
@@ -1377,8 +1369,7 @@ class _FanCardView extends StatefulWidget {
   State<_FanCardView> createState() => _FanCardViewState();
 }
 
-class _FanCardViewState extends State<_FanCardView>
-    with SingleTickerProviderStateMixin {
+class _FanCardViewState extends State<_FanCardView> with SingleTickerProviderStateMixin {
   late PageController _pageController;
   late AnimationController _entryAnimCtrl;
 
@@ -1423,9 +1414,7 @@ class _FanCardViewState extends State<_FanCardView>
       // ignore: unnecessary_statements - 这些引用用于强制监听
       controller.remainingCards.length;
       controller.circleRotation.value;
-      final content = controller.hasSavedCircleState.value
-          ? _buildCircleView(controller)
-          : _buildFanView(controller);
+      final content = controller.hasSavedCircleState.value ? _buildCircleView(controller) : _buildFanView(controller);
 
       return content;
     });
@@ -1557,8 +1546,8 @@ class _FanCardViewState extends State<_FanCardView>
   }
 
   Widget _buildFanRow(List<int> allCards, int pageIndex) {
-    const cardW = CardohCtrl.fanCardW;  // 120
-    const cardH = CardohCtrl.fanCardH;  // 160
+    const cardW = CardohCtrl.fanCardW; // 120
+    const cardH = CardohCtrl.fanCardH; // 160
     const totalAngle = CardohCtrl.fanAngle * pi / 180;
     const startAngle = -totalAngle / 2;
 
@@ -1575,9 +1564,7 @@ class _FanCardViewState extends State<_FanCardView>
           child: Stack(
             alignment: Alignment.center,
             children: List.generate(pageCards.length, (i) {
-              final progress = pageCards.length > 1
-                  ? i / (pageCards.length - 1)
-                  : 0.5;
+              final progress = pageCards.length > 1 ? i / (pageCards.length - 1) : 0.5;
               final angle = startAngle + progress * totalAngle;
 
               // 计算卡片位置
@@ -1693,8 +1680,7 @@ class _FlyingCardsView extends StatefulWidget {
   State<_FlyingCardsView> createState() => _FlyingCardsViewState();
 }
 
-class _FlyingCardsViewState extends State<_FlyingCardsView>
-    with SingleTickerProviderStateMixin {
+class _FlyingCardsViewState extends State<_FlyingCardsView> with SingleTickerProviderStateMixin {
   late AnimationController _flyCtrl;
 
   @override
@@ -1795,8 +1781,8 @@ class _FlyingCardsViewState extends State<_FlyingCardsView>
       ];
     } else {
       // 四卡：2x2网格居中
-      const cardW = CardohCtrl.fanCardW;  // 120
-      const cardH = CardohCtrl.fanCardH;  // 160
+      const cardW = CardohCtrl.fanCardW; // 120
+      const cardH = CardohCtrl.fanCardH; // 160
       const spacing = 20.0;
       final gridW = cardW * 2 + spacing;
       final gridH = cardH * 2 + spacing;
@@ -1804,9 +1790,9 @@ class _FlyingCardsViewState extends State<_FlyingCardsView>
       final startY = (screenSize.height - gridH) / 2;
 
       return [
-        Offset(startX, startY),                             // 左上
-        Offset(startX + cardW + spacing, startY),           // 右上
-        Offset(startX, startY + cardH + spacing),            // 左下
+        Offset(startX, startY), // 左上
+        Offset(startX + cardW + spacing, startY), // 右上
+        Offset(startX, startY + cardH + spacing), // 左下
         Offset(startX + cardW + spacing, startY + cardH + spacing), // 右下
       ];
     }
@@ -1964,8 +1950,8 @@ class _ViewingCardsViewState extends State<_ViewingCardsView> {
   /// 单卡视图：300x400居中，支持拖放和缩放
   Widget _buildSingleCardView(int cardId, int deckType) {
     final screenSize = MediaQuery.of(context).size;
-    const cardW = CardohCtrl.maxCardW;  // 300
-    const cardH = CardohCtrl.maxCardH;  // 400
+    const cardW = CardohCtrl.maxCardW; // 300
+    const cardH = CardohCtrl.maxCardH; // 400
 
     // 居中位置，向上偏移160px
     final baseX = (screenSize.width - cardW) / 2;
@@ -2021,8 +2007,7 @@ class _ViewingCardsViewState extends State<_ViewingCardsView> {
                   errorBuilder: (_, __, ___) => Container(
                     color: Colors.grey[400],
                     child: Center(
-                      child: Text(cardId.toString(),
-                          style: const TextStyle(color: Colors.white, fontSize: 32)),
+                      child: Text(cardId.toString(), style: const TextStyle(color: Colors.white, fontSize: 32)),
                     ),
                   ),
                 ),
@@ -2037,8 +2022,8 @@ class _ViewingCardsViewState extends State<_ViewingCardsView> {
   /// 多卡网格视图（2x2）：每张卡120x160，点击放大
   Widget _buildMultiCardGrid(List<int> cards, int deckType, {int? excludeIndex}) {
     final screenSize = MediaQuery.of(context).size;
-    const cardW = CardohCtrl.fanCardW;  // 120
-    const cardH = CardohCtrl.fanCardH;  // 160
+    const cardW = CardohCtrl.fanCardW; // 120
+    const cardH = CardohCtrl.fanCardH; // 160
     const spacing = 20.0;
     final gridW = cardW * 2 + spacing;
     final gridH = cardH * 2 + spacing;
@@ -2094,8 +2079,7 @@ class _ViewingCardsViewState extends State<_ViewingCardsView> {
                   errorBuilder: (_, __, ___) => Container(
                     color: Colors.grey[400],
                     child: Center(
-                      child: Text(cards[i].toString(),
-                          style: const TextStyle(color: Colors.white, fontSize: 24)),
+                      child: Text(cards[i].toString(), style: const TextStyle(color: Colors.white, fontSize: 24)),
                     ),
                   ),
                 ),
@@ -2110,11 +2094,11 @@ class _ViewingCardsViewState extends State<_ViewingCardsView> {
   /// 放大的单卡（从多卡选中）：300x400，支持拖放缩放
   Widget _buildZoomedCard(int cardId, int deckType) {
     final screenSize = MediaQuery.of(context).size;
-    const cardW = CardohCtrl.maxCardW;  // 300
-    const cardH = CardohCtrl.maxCardH;  // 400
+    const cardW = CardohCtrl.maxCardW; // 300
+    const cardH = CardohCtrl.maxCardH; // 400
 
     final baseX = (screenSize.width - cardW) / 2;
-    final baseY = (screenSize.height - cardH) / 2 - 160;  // 向上偏移160px
+    final baseY = (screenSize.height - cardH) / 2 - 160; // 向上偏移160px
     final finalX = baseX + _offsetX;
     final finalY = baseY + _offsetY;
 
@@ -2169,8 +2153,7 @@ class _ViewingCardsViewState extends State<_ViewingCardsView> {
                   errorBuilder: (_, __, ___) => Container(
                     color: Colors.grey[400],
                     child: Center(
-                      child: Text(cardId.toString(),
-                          style: const TextStyle(color: Colors.white, fontSize: 32)),
+                      child: Text(cardId.toString(), style: const TextStyle(color: Colors.white, fontSize: 32)),
                     ),
                   ),
                 ),
@@ -2230,9 +2213,7 @@ class _FloatingToolbar extends StatelessWidget {
         const SizedBox(height: 24),
         // 四卡连抽（扇形/查看阶段且剩余卡>=4）
         Obx(() {
-          final canDraw = controller.remainingCards.length >= 4 &&
-              (controller.phase.value == CardohPhase.fan ||
-                  controller.phase.value == CardohPhase.viewing);
+          final canDraw = controller.remainingCards.length >= 4 && (controller.phase.value == CardohPhase.fan || controller.phase.value == CardohPhase.viewing);
           return _ToolbarButton(
             icon: Icons.grid_view,
             tooltip: '四卡连抽',
