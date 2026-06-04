@@ -173,8 +173,8 @@ class CardohCtrl extends GetxController {
     selectedCardIndex.value = null;
     flyStartPositions.clear();
 
-    // 注意：这里不设置 phase，让用户看到整齐堆叠的卡牌
-    // 点击工具栏洗牌按钮才会开始洗牌
+    // 回到整齐堆叠状态，让用户从洗牌开始玩
+    phase.value = CardohPhase.select;
   }
 
   /// 开始洗牌动画
@@ -331,61 +331,96 @@ class CardohCtrl extends GetxController {
 
   /// 重新开始
   void resetAll() {
-    phase.value = CardohPhase.select;
-    selectedDeck.value = null;
-    fanDisplayCards.clear();
-    remainingCards.clear();
+    // 清空已抽的卡，恢复所有卡到剩余卡
     drawnCardSets.clear();
     currentCards.clear();
     selectedCardIndex.value = null;
     flyStartPositions.clear();
     isFlying.value = false;
     flyProgress.value = 0.0;
+    
+    // 重建剩余卡（所有卡都可抽）
+    final drawnIds = <int>{};
+    remainingCards.value = fanDisplayCards.where((id) => !drawnIds.contains(id)).toList();
+    
+    // 回到整齐堆叠状态，和初始选择卡组后一样
+    phase.value = CardohPhase.select;
   }
 
   /// 打开设置对话框
   void showSettingsDialog() {
-    if (selectedDeck.value == null) return;
-
     Get.dialog(
-      AlertDialog(
-        backgroundColor: const Color(0xFF2A2A4E),
-        title: const Text('设置', style: TextStyle(color: Colors.white)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (selectedDeck.value == 1) ...[
-              const Text(
-                '基础卡设置',
-                style: TextStyle(color: Colors.white70, fontSize: 14),
+      Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: const Color(0xFFE0F7FA),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 标题
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2A2A4E),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text(
+                  '基础卡特殊卡设置',
+                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                ),
               ),
-              const SizedBox(height: 12),
-              Obx(() => SwitchListTile(
-                    title: const Text(
-                      '包含 39/40/41 特殊卡',
-                      style: TextStyle(color: Colors.white, fontSize: 14),
+              const SizedBox(height: 20),
+              // 三张特殊卡并排显示
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _SpecialCardItem(cardId: 39, deckType: 1),
+                  _SpecialCardItem(cardId: 40, deckType: 1),
+                  _SpecialCardItem(cardId: 41, deckType: 1),
+                ],
+              ),
+              const SizedBox(height: 16),
+              // 包含特殊卡开关
+              Obx(() => Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFF80CBC4)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('包含特殊卡', style: TextStyle(color: Color(0xFF2A2A4E), fontSize: 14)),
+                    const SizedBox(width: 8),
+                    Switch(
+                      value: includeSpecial.value,
+                      onChanged: (v) {
+                        includeSpecial.value = v;
+                        _rebuildCards();
+                      },
+                      activeTrackColor: const Color(0xFF80CBC4),
                     ),
-                    value: includeSpecial.value,
-                    onChanged: (v) {
-                      includeSpecial.value = v;
-                      _rebuildCards();
-                    },
-                    activeTrackColor: Colors.amber,
-                  )),
-            ] else ...[
-              const Text(
-                '复原卡设置',
-                style: TextStyle(color: Colors.white70, fontSize: 14),
+                  ],
+                ),
+              )),
+              const SizedBox(height: 16),
+              // 关闭按钮
+              TextButton(
+                onPressed: () => Get.back(),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2A2A4E),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text('关闭', style: TextStyle(color: Colors.white)),
+                ),
               ),
             ],
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: const Text('关闭'),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -413,39 +448,71 @@ class CardohCtrl extends GetxController {
   /// 切换卡组
   void switchDeck() {
     Get.dialog(
-      AlertDialog(
-        backgroundColor: const Color(0xFF2A2A4E),
-        title: const Text('选择卡组', style: TextStyle(color: Colors.white)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _DeckOption(
-              title: '基础卡',
-              subtitle: '共 ${baseDeckCount - specialCardIds.length} 张（不含特殊卡）',
-              selected: selectedDeck.value == 1,
-              onTap: () {
-                Get.back();
-                selectDeck(1);
-              },
-            ),
-            const SizedBox(height: 12),
-            _DeckOption(
-              title: '复原卡',
-              subtitle: '共 $recoveryDeckCount 张',
-              selected: selectedDeck.value == 2,
-              onTap: () {
-                Get.back();
-                selectDeck(2);
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: const Text('取消'),
+      Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: const Color(0xFFE0F7FA),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2A2A4E),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text(
+                  '选择卡组',
+                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+              const SizedBox(height: 20),
+              // 基础卡选项（动态显示卡数量）
+              Obx(() {
+                final isBase = selectedDeck.value == 1;
+                final baseCount = isBase
+                    ? (includeSpecial.value ? baseDeckCount : baseDeckCount - specialCardIds.length)
+                    : baseDeckCount - specialCardIds.length;
+                final subtitle = isBase
+                    ? (includeSpecial.value ? '共 $baseDeckCount 张（含特殊卡）' : '共 $baseCount 张（不含特殊卡）')
+                    : '共 $baseCount 张（不含特殊卡）';
+                return _DeckOption(
+                  title: '基础卡',
+                  subtitle: subtitle,
+                  selected: isBase,
+                  onTap: () {
+                    Get.back();
+                    selectDeck(1); // 清空一切，回到整齐堆叠状态
+                  },
+                );
+              }),
+              const SizedBox(height: 12),
+              // 复原卡选项
+              Obx(() => _DeckOption(
+                title: '复原卡',
+                subtitle: '共 $recoveryDeckCount 张',
+                selected: selectedDeck.value == 2,
+                onTap: () {
+                  Get.back();
+                  selectDeck(2); // 清空一切，回到整齐堆叠状态
+                },
+              )),
+              const SizedBox(height: 20),
+              TextButton(
+                onPressed: () => Get.back(),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text('取消', style: TextStyle(color: Color(0xFF2A2A4E))),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -486,10 +553,10 @@ class _DeckOption extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: selected ? Colors.amber.withValues(alpha: 0.2) : Colors.transparent,
+          color: selected ? const Color(0xFF80CBC4).withValues(alpha: 0.3) : Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: selected ? Colors.amber : Colors.white24,
+            color: selected ? const Color(0xFF80CBC4) : Colors.grey[300]!,
             width: selected ? 2 : 1,
           ),
         ),
@@ -497,7 +564,7 @@ class _DeckOption extends StatelessWidget {
           children: [
             Icon(
               selected ? Icons.check_circle : Icons.circle_outlined,
-              color: selected ? Colors.amber : Colors.white38,
+              color: selected ? const Color(0xFF80CBC4) : Colors.grey[400],
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -507,14 +574,14 @@ class _DeckOption extends StatelessWidget {
                   Text(
                     title,
                     style: const TextStyle(
-                      color: Colors.white,
+                      color: Color(0xFF2A2A4E),
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   Text(
                     subtitle,
-                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
                   ),
                 ],
               ),
@@ -522,6 +589,58 @@ class _DeckOption extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// 特殊卡缩略图项（60x80）
+class _SpecialCardItem extends StatelessWidget {
+  final int cardId;
+  final int deckType;
+
+  const _SpecialCardItem({required this.cardId, required this.deckType});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 60,
+          height: 80,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.2),
+                blurRadius: 4,
+                offset: const Offset(1, 2),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.asset(
+              'assets/images/card_oh/$deckType/${cardId.toString().padLeft(2, '0')}.jpg',
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                color: Colors.grey[400],
+                child: Center(
+                  child: Text(
+                    cardId.toString(),
+                    style: const TextStyle(color: Colors.white, fontSize: 20),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '第 $cardId 号',
+          style: const TextStyle(color: Color(0xFF2A2A4E), fontSize: 12),
+        ),
+      ],
     );
   }
 }
@@ -2052,40 +2171,30 @@ class _FloatingToolbar extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // 设置按钮
+        // 设置按钮（始终可用）
         _ToolbarButton(
           icon: Icons.settings,
           tooltip: '设置',
           onTap: () => controller.showSettingsDialog(),
         ),
         const SizedBox(height: 12),
-        // 卡组选择
-        Obx(() {
-          final isDisabled = controller.phase.value == CardohPhase.shuffling ||
-              controller.phase.value == CardohPhase.viewing;
-          return _ToolbarButton(
-            icon: Icons.layers,
-            tooltip: '卡组选择',
-            enabled: !isDisabled,
-            onTap: () => controller.switchDeck(),
-          );
-        }),
+        // 卡组选择（始终可用，切换卡组相当于重新开始）
+        _ToolbarButton(
+          icon: Icons.layers,
+          tooltip: '卡组选择',
+          onTap: () => controller.switchDeck(),
+        ),
         const SizedBox(height: 12),
-        // 重新开始
-        Obx(() {
-          final isDisabled = controller.drawnCardSets.isEmpty;
-          return _ToolbarButton(
-            icon: Icons.refresh,
-            tooltip: '重新开始',
-            enabled: !isDisabled,
-            onTap: () => _showResetConfirm(context),
-          );
-        }),
+        // 重新开始（始终可用）
+        _ToolbarButton(
+          icon: Icons.refresh,
+          tooltip: '重新开始',
+          onTap: () => _showResetConfirm(context),
+        ),
         const SizedBox(height: 12),
-        // 洗牌
+        // 洗牌（只在扇形阶段可用）
         Obx(() {
-          final isDisabled = controller.phase.value == CardohPhase.shuffling ||
-              controller.phase.value == CardohPhase.viewing;
+          final isDisabled = controller.phase.value != CardohPhase.fan;
           return _ToolbarButton(
             icon: Icons.shuffle,
             tooltip: '洗牌',
@@ -2094,7 +2203,7 @@ class _FloatingToolbar extends StatelessWidget {
           );
         }),
         const SizedBox(height: 12),
-        // 四卡连抽
+        // 四卡连抽（扇形/查看阶段且剩余卡>=4）
         Obx(() {
           final canDraw = controller.remainingCards.length >= 4 &&
               (controller.phase.value == CardohPhase.fan ||
@@ -2112,26 +2221,65 @@ class _FloatingToolbar extends StatelessWidget {
 
   void _showResetConfirm(BuildContext context) {
     Get.dialog(
-      AlertDialog(
-        backgroundColor: const Color(0xFF2A2A4E),
-        title: const Text('重新开始', style: TextStyle(color: Colors.white)),
-        content: const Text(
-          '确定要重新开始吗？所有已抽卡将被清空。',
-          style: TextStyle(color: Colors.white70),
+      Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: const Color(0xFFE0F7FA),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2A2A4E),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text(
+                  '重新开始',
+                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                '确定要重新开始吗？\n所有已抽卡将被清空。',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Color(0xFF2A2A4E), fontSize: 14),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  TextButton(
+                    onPressed: () => Get.back(),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Text('取消', style: TextStyle(color: Color(0xFF2A2A4E))),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      Get.back();
+                      controller.resetAll();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF80CBC4),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Text('确定', style: TextStyle(color: Color(0xFF2A2A4E), fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () {
-              Get.back();
-              controller.resetAll();
-            },
-            child: const Text('确定', style: TextStyle(color: Colors.amber)),
-          ),
-        ],
       ),
     );
   }
