@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:healing_junior/apps/card_oh.dart';
@@ -324,7 +324,6 @@ class VolcASRService {
 
     final config = {
       'app': {
-        'appid': '',
         'cluster': 'volcengine_streaming_common',
       },
       'user': {'uid': 'user_$_requestId'},
@@ -335,21 +334,25 @@ class VolcASRService {
         'language': 'zh-CN',
         'enable_partial': true,
         'enable_punc': true,
-        'enable_nonstream': true,      // 开启二遍识别（说话人分离必需）
-        'enable_speaker_info': true,  // 启用说话人聚类分离
-        'ssd_version': '200',          // 大模型SSD能力
+        'show_utterances': true,
+        'enable_nonstream': true,        // bigmodel_async 必需
+        'enable_speaker_info': true,
+        'ssd_version': '200',
       },
     };
 
+    // 配置消息用 binary frame 发送
     _ws!.add(_buildBinaryPacket(utf8.encode(jsonEncode(config))));
 
     _wsSubscription = _ws!.listen(
       (message) => _handleMessage(message),
       onError: (e) {
+        debugPrint('ASR WebSocket error: $e');
         _cleanup();
         if (_isRecording) _attemptRecovery();
       },
       onDone: () {
+        debugPrint('ASR WebSocket done');
         _cleanup();
         if (_isRecording) onDisconnected?.call();
       },
@@ -389,11 +392,14 @@ class VolcASRService {
   }
 
   Uint8List _buildBinaryPacket(List<int> payload) {
+    // 协议格式：4字节header + 4字节payload_size + payload
+    // header: [protocol_version(4)][header_size(4)][message_type(4)][flags(4)][serialization(4)][compression(4)][reserved(8)]
+    // full client request: message_type=1 (0b0001), serialization=1 (JSON)
     final header = ByteData(4);
-    header.setUint8(0, 0x11);
-    header.setUint8(1, 0x10);
-    header.setUint8(2, 0x10);
-    header.setUint8(3, 0x00);
+    header.setUint8(0, 0x11); // protocol_version=1, header_size=1
+    header.setUint8(1, 0x10); // message_type=1 (full client request), flags=0
+    header.setUint8(2, 0x10); // serialization=1 (JSON), compression=0
+    header.setUint8(3, 0x00); // reserved
     final payloadSize = ByteData(4)..setUint32(0, payload.length, Endian.big);
     final packet = Uint8List(8 + payload.length);
     packet.setRange(0, 4, header.buffer.asUint8List());
@@ -403,11 +409,12 @@ class VolcASRService {
   }
 
   Uint8List _buildAudioPacket(List<int> audioData) {
+    // audio only request: message_type=2 (0b0010), serialization=0 (无序列化)
     final header = ByteData(4);
-    header.setUint8(0, 0x11);
-    header.setUint8(1, 0x20);
-    header.setUint8(2, 0x20);
-    header.setUint8(3, 0x00);
+    header.setUint8(0, 0x11); // protocol_version=1, header_size=1
+    header.setUint8(1, 0x20); // message_type=2 (audio only request), flags=0
+    header.setUint8(2, 0x00); // serialization=0 (无序列化), compression=0
+    header.setUint8(3, 0x00); // reserved
     final payloadSize = ByteData(4)..setUint32(0, audioData.length, Endian.big);
     final packet = Uint8List(8 + audioData.length);
     packet.setRange(0, 4, header.buffer.asUint8List());
@@ -417,6 +424,9 @@ class VolcASRService {
   }
 
   void _handleMessage(dynamic message) {
+    // 停止后不再处理消息
+    if (!_isRecording) return;
+
     try {
       if (message is List<int>) {
         int jsonStart = -1;
@@ -446,16 +456,29 @@ class VolcASRService {
       }
       final result = data['result'];
       if (result == null) return;
+
       final utterances = result['utterances'] as List?;
       if (utterances == null || utterances.isEmpty) return;
 
       final speakerTexts = <MapEntry<int, String>>[];
       for (final utt in utterances) {
-        final spkid = utt['spkid'] as int? ?? 0;
-        final uttText = (utt['text'] as String?)?.trim() ?? '';
-        if (uttText.isNotEmpty) {
-          speakerTexts.add(MapEntry(spkid, uttText));
+        // 获取 text
+        final uttText = utt['text'];
+        if (uttText == null || uttText.toString().trim().isEmpty) continue;
+
+        // 获取 speaker_id（从 additions 里面，支持 int 或 String 类型）
+        int speakerId = 0;
+        final additions = utt['additions'];
+        if (additions != null) {
+          final sid = additions['speaker_id'];
+          if (sid is int) {
+            speakerId = sid;
+          } else if (sid is String) {
+            speakerId = int.tryParse(sid) ?? 0;
+          }
         }
+
+        speakerTexts.add(MapEntry(speakerId, uttText.toString().trim()));
       }
       if (speakerTexts.isEmpty) return;
 
@@ -938,17 +961,25 @@ class AIDialogCtrl extends GetxController {
 
     // 更新每个speaker的累积文本
     for (final entry in result.speakerTexts) {
-      final spkid = entry.key;
+      final speakerId = entry.key;
       final uttText = entry.value;
       if (uttText.isNotEmpty) {
-        _speakerTexts[spkid] = uttText;
-        _getOrAssignLabel(spkid);
+        // 调试：打印speaker_id
+        debugPrint('AIDialogCtrl收到: speaker_id=$speakerId, text=$uttText');
+        _speakerTexts[speakerId] = uttText;
+        _getOrAssignLabel(speakerId);
       }
     }
 
     // 拼接带说话人标记的完整文本
+    // speaker_id=0 → 某人, 1 → A, 2 → B, 3 → C...
     final markedText = result.speakerTexts.map((e) {
-      final label = _speakerInfos[e.key]?.label ?? '?';
+      String label;
+      if (e.key == 0) {
+        label = '某';
+      } else {
+        label = String.fromCharCode(65 + e.key - 1); // 1→A, 2→B, 3→C...
+      }
       return '【$label说】${e.value}';
     }).join('\n');
     currentFullText.value = markedText;
@@ -1118,8 +1149,14 @@ class AIDialogCtrl extends GetxController {
       } catch (_) {}
 
       // 构建对话内容
+      // speaker_id=0 → 某人说, 1 → A说, 2 → B说...
       final dialogContent = _speakerTexts.entries.map((e) {
-        final label = _speakerInfos[e.key]?.label ?? '?';
+        String label;
+        if (e.key == 0) {
+          label = '某';
+        } else {
+          label = String.fromCharCode(65 + e.key - 1);
+        }
         return '【$label说】：${e.value}';
       }).join('\n');
 
@@ -1454,8 +1491,14 @@ class AIDialogCtrl extends GetxController {
     if (_speakerTexts.isEmpty) return;
 
     // 构建对话上下文（ASR只区分不同说话人如A、B、C，不区分疗愈师/来访者）
+    // speaker_id=0 → 某人说, 1 → A说, 2 → B说...
     final conversation = _speakerTexts.entries.map((e) {
-      final label = _speakerInfos[e.key]?.label ?? '?';
+      String label;
+      if (e.key == 0) {
+        label = '某';
+      } else {
+        label = String.fromCharCode(65 + e.key - 1);
+      }
       return '【$label说】：${e.value}';
     }).join('\n');
 
