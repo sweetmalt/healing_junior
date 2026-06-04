@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:healing_junior/apps/card_oh.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
@@ -30,16 +31,22 @@ class IndexView extends StatelessWidget {
             index: controller.index.value,
             children: [
               FaceView(),
+              CardohView(),
               MyView(),
               SettingView(),
             ],
           )),
       bottomNavigationBar: Obx(() => BottomNavigationBar(
             selectedFontSize: 16,
+            selectedItemColor: Colors.purple,
+            unselectedItemColor: Colors.grey,
             currentIndex: controller.index.value,
+            showSelectedLabels:true,
+            showUnselectedLabels:true,
             onTap: controller.updateIndex,
             items: [
               BottomNavigationBarItem(icon: Icon(Icons.child_care_rounded), label: '欢迎'),
+              BottomNavigationBarItem(icon: Icon(Icons.style), label: 'OH卡'),
               BottomNavigationBarItem(icon: Icon(Icons.auto_graph_rounded), label: '检测'),
               BottomNavigationBarItem(icon: Icon(Icons.settings), label: '设置'),
             ],

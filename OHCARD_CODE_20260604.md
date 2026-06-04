@@ -1,3 +1,13 @@
+# OH卡模块代码备份
+
+**文件**: `card_oh.dart`
+**备份日期**: 2026-06-04
+**行数**: ~2354行
+**状态**: 通过 flutter analyze
+
+---
+
+```dart
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -671,25 +681,22 @@ class CardohView extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = Get.put(CardohCtrl());
 
-    return Container(
-      color: const Color(0xFFE0F7FA),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              // 主内容
-              Obx(() => _buildContent(controller)),
-              // 右侧工具条
-              Positioned(
-                right: 16,
-                top: 100,
-                bottom: 200,
-                child: _FloatingToolbar(controller: controller),
-              ),
-            ],
-          );
-        },
+    return Scaffold(
+      backgroundColor: const Color(0xFFE0F7FA),
+      body: SafeArea(
+        child: Stack(
+          children: [
+            // 主内容
+            Obx(() => _buildContent(controller)),
+            // 右侧工具条
+            Positioned(
+              right: 16,
+              top: 100,
+              bottom: 200,
+              child: _FloatingToolbar(controller: controller),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1680,6 +1687,11 @@ class _FanCard extends StatelessWidget {
     );
   }
 }
+```
+
+---
+
+**备份完成**
 
 /// ============================================================
 /// 飞行中的卡视图
@@ -1909,6 +1921,11 @@ class _FlyingCardState extends State<_FlyingCard> {
     );
   }
 }
+```
+
+---
+
+**备份完成**
 
 /// ============================================================
 /// 查看已抽卡视图（放大/缩小/拖动）
@@ -2354,3 +2371,8 @@ class _ToolbarButton extends StatelessWidget {
     );
   }
 }
+```
+
+---
+
+**备份完成**
