@@ -1187,6 +1187,9 @@ class _CardSetThumbnail extends StatelessWidget {
   }
 
   Widget _buildMultiThumbnail(List<int> ids, double w, double h) {
+    final halfW = w / 2;
+    final halfH = h / 2;
+
     return Container(
       width: w,
       height: h,
@@ -1202,19 +1205,21 @@ class _CardSetThumbnail extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(6),
-        child: GridView.count(
-          crossAxisCount: 2,
-          physics: const NeverScrollableScrollPhysics(),
-          children: List.generate(4, (i) {
-            if (i < ids.length) {
-              return Image.asset(
-                'assets/images/card_oh/$deckType/${ids[i].toString().padLeft(2, '0')}.jpg',
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(color: Colors.grey[400]),
-              );
-            }
-            return Container(color: Colors.grey[300]);
-          }),
+        child: Stack(
+          children: [
+            for (int i = 0; i < ids.length && i < 4; i++)
+              Positioned(
+                left: (i % 2) * halfW,
+                top: (i ~/ 2) * halfH,
+                width: halfW,
+                height: halfH,
+                child: Image.asset(
+                  'assets/images/card_oh/$deckType/${ids[i].toString().padLeft(2, '0')}.jpg',
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(color: Colors.grey[400]),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -1965,22 +1970,13 @@ class _ViewingCardsViewState extends State<_ViewingCardsView> {
     const cardH = CardohCtrl.maxCardH;  // 400
 
     final baseX = (screenSize.width - cardW) / 2;
-    final baseY = (screenSize.height - cardH) / 2;
+    final baseY = (screenSize.height - cardH) / 2 - 160;  // 向上偏移160px
     final finalX = baseX + _offsetX;
     final finalY = baseY + _offsetY;
 
     return Stack(
       children: [
-        // 点击背景关闭
-        Positioned.fill(
-          child: GestureDetector(
-            onTap: () {
-              widget.controller.selectedCardIndex.value = null;
-            },
-            child: Container(color: Colors.transparent),
-          ),
-        ),
-        // 放大的卡
+        // 放大的卡（点击图片本身关闭）
         Positioned(
           left: finalX,
           top: finalY,
@@ -1995,7 +1991,12 @@ class _ViewingCardsViewState extends State<_ViewingCardsView> {
                 _offsetY += details.focalPointDelta.dy;
               });
             },
+            onTap: () {
+              // 点击图片本身关闭放大
+              widget.controller.selectedCardIndex.value = null;
+            },
             onDoubleTap: () {
+              // 双击重置缩放
               setState(() {
                 _pinchScale = 1.0;
                 _basePinchScale = 1.0;
