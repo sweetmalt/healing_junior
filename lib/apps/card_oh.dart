@@ -1188,11 +1188,8 @@ class _MainContent extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // 顶部已抽卡缩略图栏
-        Obx(() => _DrawnCardsBar(
-              controller: controller,
-              isEmpty: controller.drawnCardSets.isEmpty,
-            )),
+        // 顶部已抽卡缩略图栏（_DrawnCardsBar 内部已有 Obx）
+        _DrawnCardsBar(controller: controller),
         // 中间区域
         Expanded(
           child: Stack(
@@ -1228,50 +1225,51 @@ class _MainContent extends StatelessWidget {
 /// ============================================================
 class _DrawnCardsBar extends StatelessWidget {
   final CardohCtrl controller;
-  final bool isEmpty;
 
-  const _DrawnCardsBar({
-    required this.controller,
-    required this.isEmpty,
-  });
+  const _DrawnCardsBar({required this.controller});
 
   @override
   Widget build(BuildContext context) {
-    if (isEmpty) {
+    // 直接在 Obx 内访问响应式状态
+    return Obx(() {
+      final isEmpty = controller.drawnCardSets.isEmpty;
+
+      if (isEmpty) {
+        return Container(
+          height: 80,
+          color: const Color(0xFFB2DFDB).withValues(alpha: 0.5),
+          child: const Center(
+            child: Text(
+              '已抽卡将显示在这里',
+              style: TextStyle(color: Colors.black38, fontSize: 14),
+            ),
+          ),
+        );
+      }
+
       return Container(
         height: 80,
-        color: const Color(0xFFB2DFDB).withValues(alpha: 0.5),
-        child: const Center(
-          child: Text(
-            '已抽卡将显示在这里',
-            style: TextStyle(color: Colors.black38, fontSize: 14),
-          ),
+        color: const Color(0xFFB2DFDB).withValues(alpha: 0.9),
+        child: ListView.builder(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+          itemCount: controller.drawnCardSets.length,
+          itemBuilder: (context, index) {
+            final cards = controller.drawnCardSets[index];
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: GestureDetector(
+                onTap: () => controller.viewDrawnSet(index),
+                child: _CardSetThumbnail(
+                  cardIds: cards,
+                  deckType: controller.selectedDeck.value ?? 1,
+                ),
+              ),
+            );
+          },
         ),
       );
-    }
-
-    return Container(
-      height: 80,
-      color: const Color(0xFFB2DFDB).withValues(alpha: 0.9),
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-        itemCount: controller.drawnCardSets.length,
-        itemBuilder: (context, index) {
-          final cards = controller.drawnCardSets[index];
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: GestureDetector(
-              onTap: () => controller.viewDrawnSet(index),
-              child: _CardSetThumbnail(
-                cardIds: cards,
-                deckType: controller.selectedDeck.value ?? 1,
-              ),
-            ),
-          );
-        },
-      ),
-    );
+    });
   }
 }
 
@@ -1938,31 +1936,34 @@ class _ViewingCardsViewState extends State<_ViewingCardsView> {
 
   @override
   Widget build(BuildContext context) {
-    final cards = widget.controller.currentCards;
-    final selectedIdx = widget.controller.selectedCardIndex.value;
-    final deckType = widget.controller.selectedDeck.value ?? 1;
+    // 使用 Obx 监听 currentCards 和 selectedCardIndex 的变化
+    return Obx(() {
+      final cards = widget.controller.currentCards;
+      final selectedIdx = widget.controller.selectedCardIndex.value;
+      final deckType = widget.controller.selectedDeck.value ?? 1;
 
-    if (cards.isEmpty) return const SizedBox.shrink();
+      if (cards.isEmpty) return const SizedBox.shrink();
 
-    // 单卡模式：始终显示300x400，支持拖放和缩放
-    if (cards.length == 1) {
-      return _buildSingleCardView(cards[0], deckType);
-    }
+      // 单卡模式：始终显示300x400，支持拖放和缩放
+      if (cards.length == 1) {
+        return _buildSingleCardView(cards[0], deckType);
+      }
 
-    // 多卡模式：如果有选中的卡，显示放大的卡在其他卡之上
-    if (selectedIdx != null && selectedIdx < cards.length) {
-      return Stack(
-        children: [
-          // 背景：显示其他卡的小图
-          _buildMultiCardGrid(cards, deckType, excludeIndex: selectedIdx),
-          // 前景：放大的卡
-          _buildZoomedCard(cards[selectedIdx], deckType),
-        ],
-      );
-    }
+      // 多卡模式：如果有选中的卡，显示放大的卡在其他卡之上
+      if (selectedIdx != null && selectedIdx < cards.length) {
+        return Stack(
+          children: [
+            // 背景：显示其他卡的小图
+            _buildMultiCardGrid(cards, deckType, excludeIndex: selectedIdx),
+            // 前景：放大的卡
+            _buildZoomedCard(cards[selectedIdx], deckType),
+          ],
+        );
+      }
 
-    // 多卡网格视图
-    return _buildMultiCardGrid(cards, deckType);
+      // 多卡网格视图
+      return _buildMultiCardGrid(cards, deckType);
+    });
   }
 
   /// 单卡视图：300x400居中，支持拖放和缩放
