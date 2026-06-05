@@ -148,7 +148,7 @@ class TrendCtrl extends GetxController {
       }
     }
     if (trendEmos.isNotEmpty) {
-      indexCtrl.updateTalk(trendEmos.join(","));
+      indexCtrl.injectEmotion(trendEmos.join(","));
     }
   }
 

@@ -139,17 +139,14 @@ class IndexCtrl extends GetxController {
     Get.put(AIDialogCtrl());
   }
 
-  final talkList = ["您好！", "此刻，您看到了什么？", "让您想起啥？"].obs;
-  void updateTalk(String talk) {
-    String subTalk = "";
-    if (talk.length > 20) {
-      subTalk = "${talk.substring(0, 20)}...";
-    } else {
-      subTalk = talk;
-    }
-    talkList[0] = talkList[1];
-    talkList[1] = talkList[2];
-    talkList[2] = subTalk;
+
+  /// 注入情绪事件（供脑电波监测模块调用）
+  /// 每隔16秒脑电波模块调用一次
+  void injectEmotion(String emotion) {
+    try {
+      final aiCtrl = Get.find<AIDialogCtrl>();
+      aiCtrl.injectEmotion(emotion);
+    } catch (_) {}
   }
 }
 
@@ -509,6 +506,22 @@ class ASRResult {
   });
 }
 
+/// 情绪事件
+class _EmotionEvent {
+  final DateTime timestamp;
+  final String emotion;
+  _EmotionEvent({required this.timestamp, required this.emotion});
+}
+
+/// 混合事件（用于生成混合文本）
+class _MixedEvent {
+  final DateTime timestamp;
+  final String type; // 'dialog' or 'emotion'
+  final int? speakerId;
+  final String text;
+  _MixedEvent({required this.timestamp, required this.type, this.speakerId, required this.text});
+}
+
 // ==================== 说话人角色 ====================
 
 enum SpeakerRole { therapist, client, unknown }
@@ -840,6 +853,21 @@ class AIDialogCtrl extends GetxController {
   // ========== 每个speaker的累积文本（用于分析和整理）==========
   final Map<int, String> _speakerTexts = {};
 
+  // ========== 情绪事件（用于混合显示）==========
+  final List<_EmotionEvent> _emotionEvents = [];
+
+  /// 注入情绪事件（供脑电波监测模块调用）
+  /// 注意：此方法只存储情绪事件，不影响语音识别的实时显示
+  void injectEmotion(String emotion) {
+    if (!_isSessionActive) return;
+    _emotionEvents.add(_EmotionEvent(
+      timestamp: DateTime.now(),
+      emotion: emotion,
+    ));
+    // 不更新 currentFullText，保持原有语音识别显示不变
+    // 情绪内容只在报告生成时混入
+  }
+
   // ========== 右侧：对话区域 ==========
   final processedDialogs = <ProcessedDialogEntry>[].obs;
 
@@ -956,22 +984,17 @@ class AIDialogCtrl extends GetxController {
     }
     _lastDisplayText = text;
 
-    // 更新左侧全文（覆盖，不是追加）
-    currentFullText.value = text;
-
     // 更新每个speaker的累积文本
     for (final entry in result.speakerTexts) {
       final speakerId = entry.key;
       final uttText = entry.value;
       if (uttText.isNotEmpty) {
-        // 调试：打印speaker_id
-        debugPrint('AIDialogCtrl收到: speaker_id=$speakerId, text=$uttText');
         _speakerTexts[speakerId] = uttText;
         _getOrAssignLabel(speakerId);
       }
     }
 
-    // 拼接带说话人标记的完整文本
+    // 保持原有显示方式：拼接带说话人标记的完整文本
     // speaker_id=0 → 某人, 1 → A, 2 → B, 3 → C...
     final markedText = result.speakerTexts.map((e) {
       String label;
@@ -986,9 +1009,55 @@ class AIDialogCtrl extends GetxController {
 
     // 立即重新分析（因为全文已更新）
     _reAnalyze();
+  }
 
-    // 更新主界面（显示最新的完整文本）
-    _updateIndexTalkList(text);
+  /// 生成混合文本（对话 + 情绪，用于报告和提示问题）
+  String _generateMixedText() {
+    // 收集所有事件
+    final allEvents = <_MixedEvent>[];
+
+    // 添加对话事件（使用当前 _speakerTexts）
+    final now = DateTime.now();
+    int idx = 0;
+    for (final entry in _speakerTexts.entries) {
+      allEvents.add(_MixedEvent(
+        timestamp: now.subtract(Duration(seconds: _speakerTexts.length - idx)),
+        type: 'dialog',
+        speakerId: entry.key,
+        text: entry.value,
+      ));
+      idx++;
+    }
+
+    // 添加情绪事件
+    for (final e in _emotionEvents) {
+      allEvents.add(_MixedEvent(
+        timestamp: e.timestamp,
+        type: 'emotion',
+        text: e.emotion,
+      ));
+    }
+
+    // 按时间排序
+    allEvents.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+    // 生成混合文本
+    final lines = <String>[];
+    for (final e in allEvents) {
+      if (e.type == 'dialog') {
+        String label;
+        if (e.speakerId == null || e.speakerId == 0) {
+          label = '某';
+        } else {
+          label = String.fromCharCode(65 + e.speakerId! - 1);
+        }
+        lines.add('【$label说】：${e.text}');
+      } else {
+        lines.add('💭 ${e.text}');
+      }
+    }
+
+    return lines.join('\n');
   }
 
   String _getOrAssignLabel(int speakerId) {
@@ -1004,12 +1073,7 @@ class AIDialogCtrl extends GetxController {
     return _speakerInfos[speakerId]!.label;
   }
 
-  void _updateIndexTalkList(String text) {
-    try {
-      final indexCtrl = Get.find<IndexCtrl>();
-      indexCtrl.updateTalk(text);
-    } catch (_) {}
-  }
+
 
   Future<void> startRecording() async {
     if (isRecording.value) return;
@@ -1148,17 +1212,8 @@ class AIDialogCtrl extends GetxController {
         clientName = customerCtrl.nickname.value.isNotEmpty ? customerCtrl.nickname.value : '来访者';
       } catch (_) {}
 
-      // 构建对话内容
-      // speaker_id=0 → 某人说, 1 → A说, 2 → B说...
-      final dialogContent = _speakerTexts.entries.map((e) {
-        String label;
-        if (e.key == 0) {
-          label = '某';
-        } else {
-          label = String.fromCharCode(65 + e.key - 1);
-        }
-        return '【$label说】：${e.value}';
-      }).join('\n');
+      // 构建对话内容（使用混合文本：对话 + 情绪）
+      final dialogContent = _generateMixedText();
 
       // 限制字数：超过5000字时只取最新5000字（越到最后的内容越有价值）
       final limitedContent = dialogContent.length > 5000 ? dialogContent.substring(dialogContent.length - 5000) : dialogContent;
@@ -1488,19 +1543,10 @@ class AIDialogCtrl extends GetxController {
   }
 
   Future<void> _generateHint() async {
-    if (_speakerTexts.isEmpty) return;
+    if (_speakerTexts.isEmpty && _emotionEvents.isEmpty) return;
 
-    // 构建对话上下文（ASR只区分不同说话人如A、B、C，不区分疗愈师/来访者）
-    // speaker_id=0 → 某人说, 1 → A说, 2 → B说...
-    final conversation = _speakerTexts.entries.map((e) {
-      String label;
-      if (e.key == 0) {
-        label = '某';
-      } else {
-        label = String.fromCharCode(65 + e.key - 1);
-      }
-      return '【$label说】：${e.value}';
-    }).join('\n');
+    // 构建对话上下文（使用混合文本：对话 + 情绪）
+    final conversation = _generateMixedText();
 
     // 文本字数限制：超过500字时只取最新500字
     final truncated = conversation.length > 500 ? conversation.substring(conversation.length - 500) : conversation;

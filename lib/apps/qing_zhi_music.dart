@@ -224,7 +224,6 @@ class QingZhiMusicCtrl extends GetxController {
     }
     final musicInfo = await fetchMusic(index);
     if (musicInfo != null) {
-      indexCtrl.updateTalk("开始播放: ${musicInfo.musicName}");
       await _audioPlayer.setUrl(musicInfo.downloadUrl);
       await _audioPlayer.setLoopMode(LoopMode.one);
       _audioPlayer.play();
