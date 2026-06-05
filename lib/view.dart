@@ -23,6 +23,7 @@ import 'package:healing_junior/apps/waves.dart';
 import 'package:healing_junior/apps/welcome.dart';
 import 'package:healing_junior/apps/wuluohai.dart';
 import 'package:healing_junior/ctrl.dart';
+import 'package:healing_junior/index.dart';
 
 Color colorSurface = const Color.fromARGB(255, 188, 166, 244);
 Color colorPrimary = const Color.fromARGB(255, 222, 222, 222);
@@ -272,7 +273,7 @@ class MyView extends GetView<MyCtrl> {
                     leading: Icon(Icons.games_rounded),
                     collapsedShape: Border(top: BorderSide(color: colorSurface)),
                     shape: Border(top: BorderSide(color: colorSurface)),
-                    title: MyTextP1("疗愈实验室 - 中医情志 - new"),
+                    title: MyTextP1("疗愈实验室 - 情志"),
                     subtitle: MyTextP3("探索情绪跟踪如何与各种疗愈服务场景相结合", colorPrimaryContainer),
                     children: [
                       QingZhiView(),
@@ -357,7 +358,7 @@ class MyView extends GetView<MyCtrl> {
                     leading: Icon(Icons.color_lens_rounded),
                     collapsedShape: Border(top: BorderSide(color: colorSurface)),
                     shape: Border(top: BorderSide(color: colorSurface)),
-                    title: MyTextP1("脑波作画"),
+                    title: MyTextP1("情绪画像 - 脑波作画"),
                     subtitle: MyTextP3("让AI用图像色彩尝试表达当下心境", colorPrimaryContainer),
                     children: [
                       DrawView(),
@@ -393,8 +394,27 @@ class MyView extends GetView<MyCtrl> {
                   ),
                 ),
               ),
+              Visibility(
+                visible: settingCtrl.states[15],
+                replacement: const SizedBox(height: 0),
+                child: RepaintBoundary(
+                  key: controller.expansionKeys[15],
+                  child: ExpansionTile(
+                    leading: Icon(Icons.music_note_rounded),
+                    collapsedShape: Border(top: BorderSide(color: colorSurface)),
+                    shape: Border(top: BorderSide(color: colorSurface)),
+                    title: MyTextP1("疗愈报告 - OH卡"),
+                    subtitle: MyTextP3("OH卡疗愈对话分析报告", colorPrimaryContainer),
+                    children: [
+                      const SizedBox(height: 40),
+                      CardohReportView(),
+                      const SizedBox(height: 40),
+                    ],
+                  ),
+                ),
+              ),
               RepaintBoundary(
-                key: controller.expansionKeys[15],
+                key: controller.expansionKeys[16],
                 child: Container(
                   alignment: Alignment.center,
                   transformAlignment: Alignment.center,

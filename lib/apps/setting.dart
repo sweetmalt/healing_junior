@@ -99,7 +99,7 @@ class SettingView extends GetView<SettingCtrl> {
                 ),
                 Divider(height: 1, color: colorSecondary),
                 SwitchListTile(
-                  title: const Text("疗愈实验室"),
+                  title: const Text("疗愈实验室 - 情志"),
                   value: controller.states[8],
                   onChanged: (value) async {
                     controller.updateState(8, value);
@@ -160,7 +160,16 @@ class SettingView extends GetView<SettingCtrl> {
                     await controller.save();
                   },
                 ),
-                const SizedBox(height:40),
+                Divider(height: 1, color: colorSecondary),
+                SwitchListTile(
+                  title: const Text("OH卡"),
+                  value: controller.states[15],
+                  onChanged: (value) async {
+                    controller.updateState(15, value);
+                    await controller.save();
+                  },
+                ),
+                const SizedBox(height: 80),
               ],
             )),
       ),
@@ -169,7 +178,7 @@ class SettingView extends GetView<SettingCtrl> {
 }
 
 class SettingCtrl extends GetxController {
-  final RxList<bool> states = List.generate(16, (index) => true).obs;
+  final RxList<bool> states = List.generate(17, (index) => true).obs;
   @override
   void onInit() async {
     await init();

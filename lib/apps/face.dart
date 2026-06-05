@@ -29,12 +29,12 @@ class FaceView extends GetView<FaceCtrl> {
               child: Text("脑电检测"),
               onPressed: () => indexCtrl.updateIndex(2),
             ),
-            const SizedBox(height: 40),
+            const SizedBox(height: 80),
             ElevatedButton(
               child: Text("易经卡牌"),
               onPressed: () => Get.to(() => BaguaView()),
             ),
-            const SizedBox(height: 40),
+            const SizedBox(height: 80),
             ElevatedButton(
               child: Text("OH卡疗愈"),
               onPressed: () => indexCtrl.updateIndex(1),

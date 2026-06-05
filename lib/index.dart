@@ -143,7 +143,6 @@ class IndexCtrl extends GetxController {
     Get.put(AIDialogCtrl());
   }
 
-
   /// 注入情绪事件（供脑电波监测模块调用）
   /// 每隔16秒脑电波模块调用一次
   void injectEmotion(String emotion) {
@@ -336,7 +335,7 @@ class VolcASRService {
         'enable_partial': true,
         'enable_punc': true,
         'show_utterances': true,
-        'enable_nonstream': true,        // bigmodel_async 必需
+        'enable_nonstream': true, // bigmodel_async 必需
         'enable_speaker_info': true,
         'ssd_version': '200',
       },
@@ -883,6 +882,7 @@ class AIDialogCtrl extends GetxController {
   final reportList = <ReportInfo>[].obs; // 已存储的报告列表
   final isGeneratingReport = false.obs; // 是否正在生成报告
   final _showReportButton = false.obs; // 是否显示"生成报告"按钮
+  final cardohReportMarkdown = "".obs;
 
   // ========== 说话人分析 ==========
   final Map<int, SpeakerRoleInfo> _speakerInfos = {};
@@ -1077,8 +1077,6 @@ class AIDialogCtrl extends GetxController {
     return _speakerInfos[speakerId]!.label;
   }
 
-
-
   Future<void> startRecording() async {
     if (isRecording.value) return;
 
@@ -1114,6 +1112,7 @@ class AIDialogCtrl extends GetxController {
     _nextLabelIndex = 0;
     _emotionEvents.clear();
     errorMessage.value = '';
+    cardohReportMarkdown.value = '';
   }
 
   Future<void> stopRecording() async {
@@ -1246,6 +1245,7 @@ class AIDialogCtrl extends GetxController {
         Get.snackbar('错误', '报告生成失败，请重试', snackPosition: SnackPosition.BOTTOM);
         return false;
       }
+      cardohReportMarkdown.value = markdown;
 
       // 保存报告（使用顾客昵称）
       await _saveReport(markdown, clientName);
@@ -1340,7 +1340,7 @@ class AIDialogCtrl extends GetxController {
           Get.snackbar('分享失败', 'PDF生成失败');
           return;
         }
-        
+
         final pdfFileName = reportInfo.fileName.replaceAll('.md', '.pdf');
         await Printing.sharePdf(
           bytes: pdfBytes,
@@ -1513,9 +1513,9 @@ class AIDialogCtrl extends GetxController {
   /// 去掉行内 Markdown 标记
   String _stripInlineMarkdown(String text) {
     return text
-        .replaceAll(RegExp(r'\*\*(.+?)\*\*'), r'$1')  // 加粗
-        .replaceAll(RegExp(r'\*(.+?)\*'), r'$1')       // 斜体
-        .replaceAll(RegExp(r'`(.+?)`'), r'$1');        // 行内代码
+        .replaceAll(RegExp(r'\*\*(.+?)\*\*'), r'$1') // 加粗
+        .replaceAll(RegExp(r'\*(.+?)\*'), r'$1') // 斜体
+        .replaceAll(RegExp(r'`(.+?)`'), r'$1'); // 行内代码
   }
 
   /// 获取是否显示生成报告按钮
@@ -2282,5 +2282,29 @@ class _HintBubble extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class CardohReportView extends GetView<AIDialogCtrl> {
+  CardohReportView({super.key});
+
+  @override
+  final controller = Get.put(AIDialogCtrl());
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+        margin: EdgeInsets.all(10),
+        child: Obx(() => Container(
+              margin: EdgeInsets.all(20),
+              child: MarkdownBody(
+                data: controller.cardohReportMarkdown.value,
+                styleSheet: MarkdownStyleSheet(
+                  h1: TextStyle(fontSize: 24, color: colorPrimaryContainer, fontWeight: FontWeight.bold),
+                  h2: TextStyle(fontSize: 20, color: colorPrimaryContainer, fontWeight: FontWeight.bold),
+                  h3: TextStyle(fontSize: 18, color: colorPrimaryContainer, fontWeight: FontWeight.bold),
+                  p: TextStyle(fontSize: 16, color: colorPrimaryContainer),
+                ),
+              ),
+            )));
   }
 }

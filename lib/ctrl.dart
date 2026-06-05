@@ -26,7 +26,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
 class MyCtrl extends GetxController {
-  final List<GlobalKey> expansionKeys = List.generate(16, (i) => GlobalKey(debugLabel: 'expansion_$i'));
+  final List<GlobalKey> expansionKeys = List.generate(17, (i) => GlobalKey(debugLabel: 'expansion_$i'));
   Future<void> shareReport(String type, int timestamp) async {
     Get.defaultDialog(
       title: '分享报告',
