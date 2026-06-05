@@ -1108,6 +1108,7 @@ class AIDialogCtrl extends GetxController {
     _speakerLabelMap.clear();
     _speakerInfos.clear();
     _nextLabelIndex = 0;
+    _emotionEvents.clear();
     errorMessage.value = '';
   }
 
