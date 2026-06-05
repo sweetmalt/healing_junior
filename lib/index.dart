@@ -14,6 +14,7 @@ import 'package:record/record.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:printing/printing.dart';
+import 'package:markdown/markdown.dart' as md;
 import 'package:healing_junior/apps/customer.dart';
 import 'package:healing_junior/apps/employee.dart';
 import 'package:healing_junior/apps/face.dart';
@@ -1366,85 +1367,155 @@ class AIDialogCtrl extends GetxController {
     }
   }
 
-  /// 解析Markdown内容为PDF widgets
+  /// 使用 markdown 包解析 Markdown 内容为 PDF widgets
+  /// 支持：标题、列表、加粗、斜体、行内代码
   /// [font] 中文字体，如果为null则使用默认字体
   List<pw.Widget> _parseMarkdownToPdf(String markdown, [pw.Font? font]) {
     final List<pw.Widget> widgets = [];
-    final lines = markdown.split('\n');
+    final document = md.Document();
 
-    // 创建文本样式（带字体）
+    // 使用 markdown 包解析
+    final lines = markdown.split('\n');
+    final blocks = document.parseLines(lines);
+
+    // 创建文本样式
     pw.TextStyle titleStyle() => pw.TextStyle(font: font, fontSize: 22, fontWeight: pw.FontWeight.bold);
     pw.TextStyle h2Style() => pw.TextStyle(font: font, fontSize: 18, fontWeight: pw.FontWeight.bold);
     pw.TextStyle h3Style() => pw.TextStyle(font: font, fontSize: 16, fontWeight: pw.FontWeight.bold);
     pw.TextStyle h4Style() => pw.TextStyle(font: font, fontSize: 14, fontWeight: pw.FontWeight.bold);
     pw.TextStyle bodyStyle() => pw.TextStyle(font: font, fontSize: 12);
 
-    for (final line in lines) {
-      if (line.isEmpty) {
-        widgets.add(pw.SizedBox(height: 8));
-        continue;
-      }
+    for (final block in blocks) {
+      if (block is md.Element) {
+        final tagName = block.tag;
 
-      // 标题处理
-      if (line.startsWith('#### ')) {
-        widgets.add(pw.SizedBox(height: 12));
-        widgets.add(pw.Text(
-          line.substring(5),
-          style: h4Style(),
-        ));
-        widgets.add(pw.SizedBox(height: 6));
-      } else if (line.startsWith('### ')) {
-        widgets.add(pw.SizedBox(height: 14));
-        widgets.add(pw.Text(
-          line.substring(4),
-          style: h3Style(),
-        ));
-        widgets.add(pw.SizedBox(height: 8));
-      } else if (line.startsWith('## ')) {
-        widgets.add(pw.SizedBox(height: 16));
-        widgets.add(pw.Text(
-          line.substring(3),
-          style: h2Style(),
-        ));
-        widgets.add(pw.SizedBox(height: 10));
-      } else if (line.startsWith('# ')) {
-        widgets.add(pw.SizedBox(height: 18));
-        widgets.add(pw.Text(
-          line.substring(2),
-          style: titleStyle(),
-        ));
-        widgets.add(pw.SizedBox(height: 12));
-      }
-      // 列表项
-      else if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
-        widgets.add(pw.Padding(
-          padding: const pw.EdgeInsets.only(left: 16),
-          child: pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text('• ', style: bodyStyle()),
-              pw.Expanded(
-                child: pw.Text(
-                  line.trim().substring(2),
-                  style: bodyStyle(),
-                ),
+        switch (tagName) {
+          case 'h1':
+            widgets.add(pw.SizedBox(height: 18));
+            widgets.add(pw.Text(_renderInline(block), style: titleStyle()));
+            widgets.add(pw.SizedBox(height: 12));
+            break;
+          case 'h2':
+            widgets.add(pw.SizedBox(height: 16));
+            widgets.add(pw.Text(_renderInline(block), style: h2Style()));
+            widgets.add(pw.SizedBox(height: 10));
+            break;
+          case 'h3':
+            widgets.add(pw.SizedBox(height: 14));
+            widgets.add(pw.Text(_renderInline(block), style: h3Style()));
+            widgets.add(pw.SizedBox(height: 8));
+            break;
+          case 'h4':
+            widgets.add(pw.SizedBox(height: 12));
+            widgets.add(pw.Text(_renderInline(block), style: h4Style()));
+            widgets.add(pw.SizedBox(height: 6));
+            break;
+          case 'ul':
+            // 无序列表
+            final ulChildren = block.children;
+            if (ulChildren != null) {
+              for (final li in ulChildren) {
+                if (li is md.Element && li.tag == 'li') {
+                  widgets.add(pw.Padding(
+                    padding: const pw.EdgeInsets.only(left: 16, top: 4),
+                    child: pw.Row(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('• ', style: bodyStyle()),
+                        pw.Expanded(child: pw.Text(_renderInline(li), style: bodyStyle())),
+                      ],
+                    ),
+                  ));
+                }
+              }
+            }
+            widgets.add(pw.SizedBox(height: 8));
+            break;
+          case 'ol':
+            // 有序列表
+            final olChildren = block.children;
+            if (olChildren != null) {
+              int idx = 1;
+              for (final li in olChildren) {
+                if (li is md.Element && li.tag == 'li') {
+                  widgets.add(pw.Padding(
+                    padding: const pw.EdgeInsets.only(left: 16, top: 4),
+                    child: pw.Row(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('$idx. ', style: bodyStyle()),
+                        pw.Expanded(child: pw.Text(_renderInline(li), style: bodyStyle())),
+                      ],
+                    ),
+                  ));
+                  idx++;
+                }
+              }
+            }
+            widgets.add(pw.SizedBox(height: 8));
+            break;
+          case 'p':
+            // 段落
+            final text = _renderInline(block);
+            if (text.trim().isNotEmpty) {
+              widgets.add(pw.Padding(
+                padding: const pw.EdgeInsets.symmetric(vertical: 2),
+                child: pw.Text(text, style: bodyStyle()),
+              ));
+            }
+            break;
+          case 'blockquote':
+            // 引用块
+            final text = _renderInline(block);
+            widgets.add(pw.Container(
+              margin: const pw.EdgeInsets.symmetric(vertical: 4),
+              padding: const pw.EdgeInsets.only(left: 12),
+              decoration: const pw.BoxDecoration(
+                border: pw.Border(left: pw.BorderSide(color: PdfColors.grey400, width: 3)),
               ),
-            ],
-          ),
-        ));
-        widgets.add(pw.SizedBox(height: 4));
-      }
-      // 普通文本
-      else {
-        widgets.add(pw.Text(
-          line,
-          style: bodyStyle(),
-        ));
-        widgets.add(pw.SizedBox(height: 4));
+              child: pw.Text(text, style: bodyStyle()),
+            ));
+            break;
+          default:
+            // 其他元素
+            final text = _renderInline(block);
+            if (text.isNotEmpty) {
+              widgets.add(pw.Text(text, style: bodyStyle()));
+            }
+        }
+      } else if (block is md.Text) {
+        if (block.text.trim().isNotEmpty) {
+          widgets.add(pw.Text(_stripInlineMarkdown(block.text), style: bodyStyle()));
+        }
       }
     }
 
     return widgets;
+  }
+
+  /// 渲染行内元素（提取纯文本，自动去掉 Markdown 标记）
+  String _renderInline(md.Element element) {
+    final buffer = StringBuffer();
+    final children = element.children;
+    if (children != null) {
+      for (final child in children) {
+        if (child is md.Text) {
+          buffer.write(_stripInlineMarkdown(child.text));
+        } else if (child is md.Element) {
+          // 递归处理子元素
+          buffer.write(_renderInline(child));
+        }
+      }
+    }
+    return buffer.toString();
+  }
+
+  /// 去掉行内 Markdown 标记
+  String _stripInlineMarkdown(String text) {
+    return text
+        .replaceAll(RegExp(r'\*\*(.+?)\*\*'), r'$1')  // 加粗
+        .replaceAll(RegExp(r'\*(.+?)\*'), r'$1')       // 斜体
+        .replaceAll(RegExp(r'`(.+?)`'), r'$1');        // 行内代码
   }
 
   /// 获取是否显示生成报告按钮
