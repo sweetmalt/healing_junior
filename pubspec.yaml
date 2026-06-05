@@ -41,23 +41,25 @@ dependencies:
   uuid: ^4.5.2
   share_plus: ^12.0.1
   record: ^6.0.0
-  pdf: ^3.11.3
+  pdf: ^3.12.0
+  google_fonts: ^8.1.0
   scidart: ^0.0.2-dev.12
   http: ^1.6.0
   just_audio: ^0.10.5
   intl: ^0.20.2
   flutter_markdown_plus: ^1.0.7
-  image_gallery_saver_plus: ^4.0.1
+  image_gallery_saver_plus: ^5.0.0
   dio: ^5.9.0
   flutter_cache_manager: ^3.4.1
   package_info_plus: ^9.0.0
   pub_semver: ^2.2.0
   url_launcher: ^6.3.2
-  syncfusion_flutter_pdfviewer: ^32.1.23
+  syncfusion_flutter_pdfviewer: ^33.2.10
   # flutter_launcher_icons: ^0.14.4
   flutter_blue_plus: ^2.2.1
   permission_handler: ^12.0.1
   json_annotation: ^4.11.0
+  printing: ^5.14.3
 
   
 dev_dependencies:
@@ -87,6 +89,7 @@ flutter:
     - assets/images/card_oh/1/
     - assets/images/card_oh/2/
     - assets/audios/
+    - assets/fonts/
 
 # flutter_icons:
 #   android: true

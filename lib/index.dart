@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:healing_junior/apps/card_oh.dart';
 import 'package:http/http.dart' as http;
@@ -11,6 +12,8 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:record/record.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:printing/printing.dart';
 import 'package:healing_junior/apps/customer.dart';
 import 'package:healing_junior/apps/employee.dart';
 import 'package:healing_junior/apps/face.dart';
@@ -1288,14 +1291,29 @@ class AIDialogCtrl extends GetxController {
     return '';
   }
 
-  /// 生成PDF报告
-  Future<File?> generatePdf(String fileName) async {
+  /// 加载中文字体（用于PDF生成）
+  /// 从 assets 目录加载 NotoSansSC
+  Future<pw.Font?> _loadChineseFont() async {
+    try {
+      // 使用 rootBundle 从 assets 加载字体
+      final fontData = await rootBundle.load('assets/fonts/NotoSansSC.ttf');
+      // pdf 包使用 Font.ttf() 加载 TTF 数据
+      return pw.Font.ttf(fontData.buffer.asByteData());
+    } catch (_) {}
+    return null;
+  }
+
+  /// 生成PDF报告（返回字节数据）
+  Future<Uint8List?> generatePdfBytes(String fileName) async {
     try {
       final markdown = await readReport(fileName);
       if (markdown.isEmpty) return null;
 
+      // 加载中文字体
+      final chineseFont = await _loadChineseFont();
+
       final pdf = pw.Document();
-      final pdfContent = _parseMarkdownToPdf(markdown);
+      final pdfContent = _parseMarkdownToPdf(markdown, chineseFont);
 
       pdf.addPage(
         pw.MultiPage(
@@ -1305,14 +1323,7 @@ class AIDialogCtrl extends GetxController {
         ),
       );
 
-      // 保存PDF
-      final dir = await _getReportDirectory();
-      final pdfFileName = fileName.replaceAll('.md', '.pdf');
-      final pdfFile = File('${dir.path}/$pdfFileName');
-      await pdfFile.writeAsBytes(await pdf.save());
-
-      // ignore: avoid_print
-      return pdfFile;
+      return await pdf.save();
     } catch (e) {
       return null;
     }
@@ -1321,22 +1332,28 @@ class AIDialogCtrl extends GetxController {
   /// 分享报告（Markdown或PDF）
   Future<void> shareReport(ReportInfo reportInfo, {bool asPdf = false}) async {
     try {
-      File? file;
-
       if (asPdf) {
-        // 生成并分享PDF
-        file = await generatePdf(reportInfo.fileName);
+        // 使用 printing 包分享 PDF
+        final pdfBytes = await generatePdfBytes(reportInfo.fileName);
+        if (pdfBytes == null) {
+          Get.snackbar('分享失败', 'PDF生成失败');
+          return;
+        }
+        
+        final pdfFileName = reportInfo.fileName.replaceAll('.md', '.pdf');
+        await Printing.sharePdf(
+          bytes: pdfBytes,
+          filename: pdfFileName,
+        );
       } else {
         // 分享原始Markdown
         final dir = await _getReportDirectory();
-        file = File('${dir.path}/${reportInfo.fileName}');
+        final file = File('${dir.path}/${reportInfo.fileName}');
         if (!await file.exists()) {
           Get.snackbar('分享失败', '文件不存在');
           return;
         }
-      }
 
-      if (file != null && await file.exists()) {
         await SharePlus.instance.share(
           ShareParams(
             files: [XFile(file.path)],
@@ -1350,9 +1367,17 @@ class AIDialogCtrl extends GetxController {
   }
 
   /// 解析Markdown内容为PDF widgets
-  List<pw.Widget> _parseMarkdownToPdf(String markdown) {
+  /// [font] 中文字体，如果为null则使用默认字体
+  List<pw.Widget> _parseMarkdownToPdf(String markdown, [pw.Font? font]) {
     final List<pw.Widget> widgets = [];
     final lines = markdown.split('\n');
+
+    // 创建文本样式（带字体）
+    pw.TextStyle titleStyle() => pw.TextStyle(font: font, fontSize: 22, fontWeight: pw.FontWeight.bold);
+    pw.TextStyle h2Style() => pw.TextStyle(font: font, fontSize: 18, fontWeight: pw.FontWeight.bold);
+    pw.TextStyle h3Style() => pw.TextStyle(font: font, fontSize: 16, fontWeight: pw.FontWeight.bold);
+    pw.TextStyle h4Style() => pw.TextStyle(font: font, fontSize: 14, fontWeight: pw.FontWeight.bold);
+    pw.TextStyle bodyStyle() => pw.TextStyle(font: font, fontSize: 12);
 
     for (final line in lines) {
       if (line.isEmpty) {
@@ -1365,28 +1390,28 @@ class AIDialogCtrl extends GetxController {
         widgets.add(pw.SizedBox(height: 12));
         widgets.add(pw.Text(
           line.substring(5),
-          style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+          style: h4Style(),
         ));
         widgets.add(pw.SizedBox(height: 6));
       } else if (line.startsWith('### ')) {
         widgets.add(pw.SizedBox(height: 14));
         widgets.add(pw.Text(
           line.substring(4),
-          style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+          style: h3Style(),
         ));
         widgets.add(pw.SizedBox(height: 8));
       } else if (line.startsWith('## ')) {
         widgets.add(pw.SizedBox(height: 16));
         widgets.add(pw.Text(
           line.substring(3),
-          style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+          style: h2Style(),
         ));
         widgets.add(pw.SizedBox(height: 10));
       } else if (line.startsWith('# ')) {
         widgets.add(pw.SizedBox(height: 18));
         widgets.add(pw.Text(
           line.substring(2),
-          style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold),
+          style: titleStyle(),
         ));
         widgets.add(pw.SizedBox(height: 12));
       }
@@ -1397,11 +1422,11 @@ class AIDialogCtrl extends GetxController {
           child: pw.Row(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Text('• ', style: const pw.TextStyle(fontSize: 12)),
+              pw.Text('• ', style: bodyStyle()),
               pw.Expanded(
                 child: pw.Text(
                   line.trim().substring(2),
-                  style: const pw.TextStyle(fontSize: 12),
+                  style: bodyStyle(),
                 ),
               ),
             ],
@@ -1413,7 +1438,7 @@ class AIDialogCtrl extends GetxController {
       else {
         widgets.add(pw.Text(
           line,
-          style: const pw.TextStyle(fontSize: 12),
+          style: bodyStyle(),
         ));
         widgets.add(pw.SizedBox(height: 4));
       }
@@ -2088,7 +2113,7 @@ class _ReportViewerSheet extends StatelessWidget {
               ],
             ),
           ),
-          // 报告内容
+          // 报告内容（使用 Markdown 渲染）
           Expanded(
             child: FutureBuilder<String>(
               future: ctrl.readReport(report.fileName),
@@ -2101,11 +2126,14 @@ class _ReportViewerSheet extends StatelessWidget {
                     child: Text('无法加载报告', style: TextStyle(color: Colors.grey[600])),
                   );
                 }
-                return SingleChildScrollView(
+                return Markdown(
+                  data: snapshot.data!,
                   padding: const EdgeInsets.all(16),
-                  child: Text(
-                    snapshot.data!,
-                    style: const TextStyle(fontSize: 14, height: 1.6),
+                  styleSheet: MarkdownStyleSheet(
+                    p: const TextStyle(fontSize: 14, height: 1.6),
+                    h2: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    h3: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    h4: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                   ),
                 );
               },

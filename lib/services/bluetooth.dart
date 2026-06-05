@@ -412,7 +412,7 @@ class MyBluetoothService extends GetxService {
     connectedDevice = device;
 
     try {
-      await device.connect(license: License.free, autoConnect: false);
+      await device.connect(license: License.nonprofit, autoConnect: false);
 
       _connectionSubscription?.cancel();
       _connectionSubscription = device.connectionState.listen((state) async {
