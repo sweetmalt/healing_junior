@@ -2552,7 +2552,7 @@ class _ViewingCardsViewState extends State<_ViewingCardsView> {
                 labels[i],
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  color: Colors.white,
+                  color: Color(0xFF4DB6AC),
                   fontSize: 16,
                   fontWeight: FontWeight.w500,
                 ),
