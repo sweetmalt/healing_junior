@@ -1812,7 +1812,7 @@ class _FlyingCardsView extends StatefulWidget {
 
 class _FlyingCardsViewState extends State<_FlyingCardsView> with SingleTickerProviderStateMixin {
   late AnimationController _flyCtrl;
-  bool _hasStartedAnimation = false;
+  bool _wasFlying = false; // 追踪之前的飞行状态
 
   @override
   void initState() {
@@ -1830,24 +1830,22 @@ class _FlyingCardsViewState extends State<_FlyingCardsView> with SingleTickerPro
   @override
   void didUpdateWidget(_FlyingCardsView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // 当 controller 变化时检查是否需要启动动画
-    _checkAndStartAnimation();
+    // 检测 isFlying 从 false 变为 true 的时刻
+    final isFlying = widget.controller.isFlying.value;
+    if (!_wasFlying && isFlying) {
+      // isFlying 从 false 变为 true，启动动画
+      _startFlyingAnimation();
+    }
+    _wasFlying = isFlying;
   }
 
-  void _checkAndStartAnimation() {
+  void _startFlyingAnimation() {
     if (!mounted) return;
-    // 如果还没开始动画，且有卡，且正在飞行，则启动动画
-    if (!_hasStartedAnimation &&
-        widget.controller.currentCards.isNotEmpty &&
-        widget.controller.isFlying.value) {
-      _hasStartedAnimation = true;
-      _flyCtrl.forward().then((_) {
-        if (!mounted) return;
-        // 重置标记，为下一次飞行做准备
-        _hasStartedAnimation = false;
-        widget.controller.onFlyComplete();
-      });
-    }
+    _flyCtrl.reset(); // 重置动画状态
+    _flyCtrl.forward().then((_) {
+      if (!mounted) return;
+      widget.controller.onFlyComplete();
+    });
   }
 
   @override
@@ -1864,7 +1862,7 @@ class _FlyingCardsViewState extends State<_FlyingCardsView> with SingleTickerPro
       final isFlying = widget.controller.isFlying.value;
       final currentFlySlot = widget.controller.currentFlyToSlot.value;
       final flyProgress = widget.controller.flyProgress.value;
-      final flyingCards = widget.controller.currentCards;
+      final flyingCards = widget.controller.currentCards.toList();
       // 关键：访问响应式变量以触发 Obx 重建
       final filledSlots = widget.controller.filledSlots.toList();
       final fourDrawCards = widget.controller.fourDrawCards.toList();
@@ -1874,6 +1872,7 @@ class _FlyingCardsViewState extends State<_FlyingCardsView> with SingleTickerPro
       // 强制读取响应式变量以确保 Obx 追踪变化
       widget.controller.filledSlots.length;
       widget.controller.fourDrawCards.length;
+      widget.controller.currentCards.length; // 强制追踪 currentCards
 
       // 四卡连抽模式：显示槽位按钮
       if (fourDrawMode) {
@@ -1881,7 +1880,7 @@ class _FlyingCardsViewState extends State<_FlyingCardsView> with SingleTickerPro
           isFlying: isFlying,
           currentFlySlot: currentFlySlot,
           flyProgress: flyProgress,
-          flyingCards: flyingCards.toList(),
+          flyingCards: flyingCards,
           filledSlots: filledSlots,
           fourDrawCards: fourDrawCards,
           deckType: deckType,
@@ -1894,12 +1893,12 @@ class _FlyingCardsViewState extends State<_FlyingCardsView> with SingleTickerPro
       final screenSize = MediaQuery.of(context).size;
       final cardCount = cards.length;
 
-      // 检查是否需要启动动画
-      if (!_hasStartedAnimation && cardCount > 0 && widget.controller.isFlying.value) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _checkAndStartAnimation();
-        });
+      // 在 Obx 中也检测 isFlying 变化，确保单卡模式下动画能启动
+      // didUpdateWidget 可能不会被调用（widget 没有变化时），所以需要双重保险
+      if (!_wasFlying && isFlying && cardCount > 0) {
+        _startFlyingAnimation();
       }
+      _wasFlying = isFlying;
 
       // 计算目标位置：单卡居中，四卡2x2网格
       final targetPositions = _calculateTargetPositions(screenSize, cardCount);
