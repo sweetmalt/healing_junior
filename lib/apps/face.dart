@@ -23,20 +23,20 @@ class FaceView extends GetView<FaceCtrl> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            MyTextH3(controller.welcome, colorPrimaryContainer),
+            MyTextH1(controller.welcome),
             const SizedBox(height: 80),
             ElevatedButton(
-              child: Text("脑电检测"),
+              child: MyTextH1("脑电检测"),
               onPressed: () => indexCtrl.updateIndex(2),
             ),
             const SizedBox(height: 80),
             ElevatedButton(
-              child: Text("易经卡牌"),
+              child: MyTextH1("易经卡牌"),
               onPressed: () => Get.to(() => BaguaView()),
             ),
             const SizedBox(height: 80),
             ElevatedButton(
-              child: Text("OH卡疗愈"),
+              child: MyTextH1("OH卡疗愈"),
               onPressed: () => indexCtrl.updateIndex(1),
             ),
           ],
