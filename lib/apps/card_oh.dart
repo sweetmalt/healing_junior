@@ -425,8 +425,10 @@ class CardohCtrl extends GetxController {
   void cancelFourDraw() {
     if (!fourDrawMode.value) return;
 
-    // 如果有卡牌飞行中，等待飞行完成后再取消
-    // 这里只标记取消，四卡连抽完成后会检查并取消
+    // 重置 phase 和 currentCards，确保后续单卡抽卡能正常执行
+    phase.value = CardohPhase.fan;
+    currentCards.clear();
+
     resetFourDrawState();
   }
 
@@ -1813,6 +1815,7 @@ class _FlyingCardsView extends StatefulWidget {
 class _FlyingCardsViewState extends State<_FlyingCardsView> with SingleTickerProviderStateMixin {
   late AnimationController _flyCtrl;
   bool _wasFlying = false; // 追踪之前的飞行状态
+  bool _isAnimating = false; // 防止重复启动动画
 
   @override
   void initState() {
@@ -1832,7 +1835,7 @@ class _FlyingCardsViewState extends State<_FlyingCardsView> with SingleTickerPro
     super.didUpdateWidget(oldWidget);
     // 检测 isFlying 从 false 变为 true 的时刻
     final isFlying = widget.controller.isFlying.value;
-    if (!_wasFlying && isFlying) {
+    if (!_wasFlying && isFlying && !_isAnimating) {
       // isFlying 从 false 变为 true，启动动画
       _startFlyingAnimation();
     }
@@ -1840,10 +1843,12 @@ class _FlyingCardsViewState extends State<_FlyingCardsView> with SingleTickerPro
   }
 
   void _startFlyingAnimation() {
-    if (!mounted) return;
+    if (!mounted || _isAnimating) return;
+    _isAnimating = true;
     _flyCtrl.reset(); // 重置动画状态
     _flyCtrl.forward().then((_) {
       if (!mounted) return;
+      _isAnimating = false;
       widget.controller.onFlyComplete();
     });
   }
@@ -1895,7 +1900,7 @@ class _FlyingCardsViewState extends State<_FlyingCardsView> with SingleTickerPro
 
       // 在 Obx 中也检测 isFlying 变化，确保单卡模式下动画能启动
       // didUpdateWidget 可能不会被调用（widget 没有变化时），所以需要双重保险
-      if (!_wasFlying && isFlying && cardCount > 0) {
+      if (!_wasFlying && isFlying && !_isAnimating && cardCount > 0) {
         _startFlyingAnimation();
       }
       _wasFlying = isFlying;
