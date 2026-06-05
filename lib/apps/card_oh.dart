@@ -2022,7 +2022,7 @@ class _FlyingCardsViewState extends State<_FlyingCardsView> with SingleTickerPro
                 labels[i],
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  color: Colors.white,
+                  color: Color(0xFF4DB6AC),
                   fontSize: 16,
                   fontWeight: FontWeight.w500,
                 ),
@@ -2088,7 +2088,7 @@ class _FlyingCardsViewState extends State<_FlyingCardsView> with SingleTickerPro
         height: CardohCtrl.fanCardH,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.white, width: 2),
+          border: Border.all(color: const Color(0xFF4DB6AC), width: 2),
           color: Colors.transparent,
         ),
       ),
