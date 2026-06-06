@@ -159,6 +159,48 @@ class IndexCtrl extends GetxController {
 /// 文档: https://www.volcengine.com/docs/6561/1354869
 /// 特点: 直接连续发送音频流，无需客户端VAD，服务器只在结果变化时返回
 /// 健壮性: 录音/识别中断时自动重连恢复
+
+/// ASR错误码映射为友好提示
+String _mapASRErrorCode(int code, String? message) {
+  // 常见火山引擎ASR错误码
+  switch (code) {
+    case 10001:
+      return '认证失败，请检查网络连接';
+    case 10002:
+      return '请求超时，请检查网络后重试';
+    case 10003:
+      return '请求格式错误';
+    case 10004:
+      return '配额不足，请稍后再试';
+    case 10005:
+      return '权限不足';
+    case 10006:
+      return '账户余额不足';
+    case 10007:
+      return '请求过于频繁，请稍后再试';
+    case 10008:
+      return '音频格式不支持';
+    case 10009:
+      return '音频过长，请缩短录音时间';
+    case 10010:
+      return '服务暂时不可用，请稍后重试';
+    case 10011:
+      return '音频采样率不匹配（需要16kHz）';
+    case 10012:
+      return '请求参数错误';
+    case 10013:
+      return '音频内容为空';
+    case 10014:
+      return '音频解码失败';
+    case 10015:
+      return '模型不存在或已下架';
+    default:
+      // 未知错误，显示原始信息
+      final msg = message ?? '未知错误';
+      return 'ASR错误 $code: $msg';
+  }
+}
+
 class VolcASRService {
   static const String _wsUrl = 'wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async';
   static const String _apiKey = '549a8a0a-3b6a-4a17-a1bc-8c0aa7ac0808';
@@ -452,7 +494,8 @@ class VolcASRService {
       final data = jsonDecode(text);
       final code = data['code'];
       if (code != null && code != 0) {
-        onError?.call('ASR错误 $code: ${data['message'] ?? '未知错误'}');
+        final msg = data['message']?.toString();
+        onError?.call(_mapASRErrorCode(code as int, msg));
         return;
       }
       final result = data['result'];
@@ -843,12 +886,25 @@ $dialogContent''';
   }
 }
 
+/// 重连进度信息
+class ReconnectInfo {
+  final int attempt;      // 当前第几次重连
+  final int maxAttempts;  // 最大重连次数
+
+  ReconnectInfo({required this.attempt, required this.maxAttempts});
+
+  String get displayText => '重连中 ($attempt/$maxAttempts)';
+}
+
 class AIDialogCtrl extends GetxController {
   final _asrService = VolcASRService();
 
   final state = AIDialogState.idle.obs;
   final isRecording = false.obs;
   final errorMessage = ''.obs;
+
+  // ========== 重连状态 ==========
+  final reconnectInfo = Rxn<ReconnectInfo>(); // 重连进度信息
 
   // ========== 录音时长 ==========
   final elapsedSeconds = 0.obs; // 录音持续秒数
@@ -988,12 +1044,16 @@ class AIDialogCtrl extends GetxController {
 
     while (_reconnectAttempts < _maxReconnectAttempts && _isSessionActive) {
       _reconnectAttempts++;
-      errorMessage.value = '连接断开，第 $_reconnectAttempts 次重连...';
+      // 更新重连进度状态
+      reconnectInfo.value = ReconnectInfo(
+        attempt: _reconnectAttempts,
+        maxAttempts: _maxReconnectAttempts,
+      );
 
       final success = await _asrService.attemptReconnect();
       if (success) {
         _isReconnecting = false;
-        errorMessage.value = '';
+        reconnectInfo.value = null;
         return;
       }
 
@@ -1005,6 +1065,7 @@ class AIDialogCtrl extends GetxController {
 
     _isReconnecting = false;
     _isSessionActive = false;
+    reconnectInfo.value = null;
     errorMessage.value = '连接中断，请重新开始';
     state.value = AIDialogState.error;
   }
@@ -1923,9 +1984,43 @@ class _AIDialogContentState extends State<_AIDialogContent> {
             return const SizedBox.shrink();
           }),
           const Spacer(),
+          // 重连进度显示
+          Obx(() {
+            final info = ctrl.reconnectInfo.value;
+            if (info != null) {
+              return Container(
+                margin: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.orange[100],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.orange[700],
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      info.displayText,
+                      style: TextStyle(color: Colors.orange[700], fontSize: 12),
+                    ),
+                  ],
+                ),
+              );
+            }
+            return const SizedBox.shrink();
+          }),
           Obx(() {
             if (ctrl.state.value == AIDialogState.connecting) {
               return Container(
+                margin: const EdgeInsets.only(right: 8),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: Colors.orange[100],
