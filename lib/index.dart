@@ -1000,8 +1000,20 @@ class AIDialogCtrl extends GetxController {
     _reanalysisTimer?.cancel();
     _hintTimer?.cancel();
     _elapsedTimer?.cancel();
+    _reanalyzeDebounce?.cancel();
     _connectivitySubscription?.cancel();
     super.onClose();
+  }
+
+  // ========== 防抖定时器 ==========
+  Timer? _reanalyzeDebounce;
+
+  /// 防抖调用 _reAnalyze（500ms 内只执行一次）
+  void _reAnalyzeDebounced() {
+    _reanalyzeDebounce?.cancel();
+    _reanalyzeDebounce = Timer(const Duration(milliseconds: 500), () {
+      _reAnalyze();
+    });
   }
 
   /// 初始化网络状态监听
@@ -1056,6 +1068,15 @@ class AIDialogCtrl extends GetxController {
     elapsedSeconds.value = 0;
     _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       elapsedSeconds.value++;
+      // 录音超过30分钟时提醒用户
+      if (elapsedSeconds.value == 1800) {
+        Get.snackbar(
+          '提示',
+          '录音已进行30分钟，内容较多时可生成报告保存',
+          snackPosition: SnackPosition.TOP,
+          duration: const Duration(seconds: 5),
+        );
+      }
     });
   }
 
@@ -1182,8 +1203,8 @@ class AIDialogCtrl extends GetxController {
     }).join('\n');
     currentFullText.value = markedText;
 
-    // 立即重新分析（因为全文已更新）
-    _reAnalyze();
+    // 防抖重新分析（避免频繁调用）
+    _reAnalyzeDebounced();
   }
 
   /// 生成混合文本（对话 + 情绪，用于报告和提示问题）
@@ -1251,7 +1272,9 @@ class AIDialogCtrl extends GetxController {
   Future<void> startRecording() async {
     if (isRecording.value) return;
 
-    // 检查网络状态
+    // 强制检查当前网络状态（避免竞态）
+    await _checkConnectivity();
+
     if (!networkStatus.value.isAvailable) {
       errorMessage.value = '请检查网络连接';
       Get.snackbar('提示', '请连接WiFi或移动网络后重试', snackPosition: SnackPosition.BOTTOM);
@@ -1313,6 +1336,37 @@ class AIDialogCtrl extends GetxController {
     _emotionEvents.clear();
     errorMessage.value = '';
     cardohReportMarkdown.value = '';
+    reconnectInfo.value = null;
+    _networkLostDuringRecording = false;
+  }
+
+  /// 停止录音（带确认对话框）
+  /// 如果录音时长超过30秒，弹出确认对话框
+  Future<void> confirmStopRecording() async {
+    if (!isRecording.value && state.value == AIDialogState.idle) return;
+
+    // 录音超过30秒时弹出确认
+    if (elapsedSeconds.value > 30) {
+      final confirmed = await Get.dialog<bool>(
+        AlertDialog(
+          title: const Text('停止录音'),
+          content: const Text('确定要停止录音吗？'),
+          actions: [
+            TextButton(
+              onPressed: () => Get.back(result: false),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () => Get.back(result: true),
+              child: const Text('确定'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+
+    await stopRecording();
   }
 
   Future<void> stopRecording() async {
@@ -1519,13 +1573,20 @@ class AIDialogCtrl extends GetxController {
   }
 
   /// 生成PDF报告（返回字节数据）
+  /// 返回 null 表示失败
   Future<Uint8List?> generatePdfBytes(String fileName) async {
     try {
       final markdown = await readReport(fileName);
-      if (markdown.isEmpty) return null;
+      if (markdown.isEmpty) {
+        debugPrint('generatePdfBytes: markdown is empty for $fileName');
+        return null;
+      }
 
       // 加载中文字体
       final chineseFont = await _loadChineseFont();
+      if (chineseFont == null) {
+        debugPrint('generatePdfBytes: failed to load Chinese font');
+      }
 
       final pdf = pw.Document();
       final pdfContent = _parseMarkdownToPdf(markdown, chineseFont);
@@ -1540,6 +1601,7 @@ class AIDialogCtrl extends GetxController {
 
       return await pdf.save();
     } catch (e) {
+      debugPrint('generatePdfBytes error: $e');
       return null;
     }
   }
@@ -1936,13 +1998,18 @@ class _AIDialogContent extends StatefulWidget {
 class _AIDialogContentState extends State<_AIDialogContent> {
   // 用于左侧面板自动滚动
   final ScrollController _leftScrollController = ScrollController();
+  // 用于右侧提示列表自动滚动
+  final ScrollController _rightScrollController = ScrollController();
 
   // 记录上次显示的文本，用于检测变化
   String _lastText = '';
+  // 记录上次提示数量，用于检测变化
+  int _lastHintCount = 0;
 
   @override
   void dispose() {
     _leftScrollController.dispose();
+    _rightScrollController.dispose();
     super.dispose();
   }
 
@@ -1966,7 +2033,7 @@ class _AIDialogContentState extends State<_AIDialogContent> {
                   // 分隔线
                   Container(width: 1, color: Colors.grey[300]),
                   // ========== 右侧：对话区域 ==========
-                  Expanded(child: _buildRightPanel(ctrl)),
+                  Expanded(child: _buildRightPanel(ctrl, _rightScrollController)),
                 ],
               ),
             ),
@@ -2207,12 +2274,26 @@ class _AIDialogContentState extends State<_AIDialogContent> {
   }
 
   /// 右侧：对话区域
-  Widget _buildRightPanel(AIDialogCtrl ctrl) {
+  Widget _buildRightPanel(AIDialogCtrl ctrl, ScrollController scrollController) {
     // 右侧：只显示提示性问题
     return Obx(() {
       final aiCtrl = Get.find<AIDialogCtrl>();
       final hintList = aiCtrl.hints;
       final recording = aiCtrl.isRecording.value;
+
+      // 检测提示数量变化，自动滚动到底部
+      if (hintList.length != _lastHintCount && hintList.isNotEmpty) {
+        _lastHintCount = hintList.length;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (scrollController.hasClients) {
+            scrollController.animateTo(
+              scrollController.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+            );
+          }
+        });
+      }
 
       if (hintList.isEmpty && !recording) {
         return Center(
@@ -2272,9 +2353,10 @@ class _AIDialogContentState extends State<_AIDialogContent> {
               ],
             ),
           ),
-          // 提示列表（最新在底部）
+          // 提示列表（最新在底部，自动滚动）
           Expanded(
             child: ListView.builder(
+              controller: scrollController,
               padding: const EdgeInsets.all(8),
               itemCount: hintList.length,
               itemBuilder: (context, index) {
@@ -2346,7 +2428,7 @@ class _AIDialogContentState extends State<_AIDialogContent> {
                     )
                   else
                     ElevatedButton.icon(
-                      onPressed: aiCtrl.stopRecording,
+                      onPressed: aiCtrl.confirmStopRecording,
                       icon: const Icon(Icons.stop),
                       label: const Text('停止录音'),
                       style: ElevatedButton.styleFrom(
