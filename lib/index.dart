@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -896,6 +897,31 @@ class ReconnectInfo {
   String get displayText => '重连中 ($attempt/$maxAttempts)';
 }
 
+/// 网络状态枚举
+enum NetworkStatus {
+  none,     // 无网络
+  wifi,     // WiFi
+  mobile,   // 移动网络
+  checking, // 检查中
+}
+
+extension NetworkStatusExt on NetworkStatus {
+  String get displayName {
+    switch (this) {
+      case NetworkStatus.none:
+        return '无网络';
+      case NetworkStatus.wifi:
+        return 'WiFi';
+      case NetworkStatus.mobile:
+        return '移动网络';
+      case NetworkStatus.checking:
+        return '检查中...';
+    }
+  }
+
+  bool get isAvailable => this == NetworkStatus.wifi || this == NetworkStatus.mobile;
+}
+
 class AIDialogCtrl extends GetxController {
   final _asrService = VolcASRService();
 
@@ -905,6 +931,11 @@ class AIDialogCtrl extends GetxController {
 
   // ========== 重连状态 ==========
   final reconnectInfo = Rxn<ReconnectInfo>(); // 重连进度信息
+
+  // ========== 网络状态 ==========
+  final networkStatus = NetworkStatus.none.obs; // 当前网络状态
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  bool _networkLostDuringRecording = false; // 录音中是否曾断网
 
   // ========== 录音时长 ==========
   final elapsedSeconds = 0.obs; // 录音持续秒数
@@ -959,6 +990,7 @@ class AIDialogCtrl extends GetxController {
     super.onInit();
     _initASRService();
     _loadReportList();
+    _initConnectivityListener();
   }
 
   @override
@@ -968,7 +1000,54 @@ class AIDialogCtrl extends GetxController {
     _reanalysisTimer?.cancel();
     _hintTimer?.cancel();
     _elapsedTimer?.cancel();
+    _connectivitySubscription?.cancel();
     super.onClose();
+  }
+
+  /// 初始化网络状态监听
+  void _initConnectivityListener() {
+    // 立即检查当前网络状态
+    _checkConnectivity();
+
+    // 监听网络状态变化
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((List<ConnectivityResult> results) {
+      _handleConnectivityChange(results);
+    });
+  }
+
+  /// 检查当前网络状态
+  Future<void> _checkConnectivity() async {
+    networkStatus.value = NetworkStatus.checking;
+    final results = await Connectivity().checkConnectivity();
+    _handleConnectivityChange(results);
+  }
+
+  /// 处理网络状态变化
+  void _handleConnectivityChange(List<ConnectivityResult> results) {
+    if (results.isEmpty || results.contains(ConnectivityResult.none)) {
+      networkStatus.value = NetworkStatus.none;
+      // 录音中断网
+      if (isRecording.value) {
+        _networkLostDuringRecording = true;
+        _asrService.stopRecording();
+        errorMessage.value = '网络已断开，录音已暂停';
+        state.value = AIDialogState.error;
+      }
+    } else {
+      // 有网络
+      if (results.contains(ConnectivityResult.wifi)) {
+        networkStatus.value = NetworkStatus.wifi;
+      } else if (results.contains(ConnectivityResult.mobile)) {
+        networkStatus.value = NetworkStatus.mobile;
+      } else {
+        networkStatus.value = NetworkStatus.wifi; // 其他情况默认WiFi
+      }
+      // 网络恢复且之前在录音中
+      if (_networkLostDuringRecording && !isRecording.value && state.value == AIDialogState.error) {
+        errorMessage.value = '网络已恢复，可以重新开始录音';
+        _networkLostDuringRecording = false;
+      }
+    }
   }
 
   /// 开始录音时长计时
@@ -1171,7 +1250,17 @@ class AIDialogCtrl extends GetxController {
 
   Future<void> startRecording() async {
     if (isRecording.value) return;
-    //
+
+    // 检查网络状态
+    if (!networkStatus.value.isAvailable) {
+      errorMessage.value = '请检查网络连接';
+      Get.snackbar('提示', '请连接WiFi或移动网络后重试', snackPosition: SnackPosition.BOTTOM);
+      return;
+    }
+
+    // 清除之前的断网标记
+    _networkLostDuringRecording = false;
+
     final customerCtrl = Get.find<CustomerCtrl>();
     if (!customerCtrl.isLoaded.value) {
       Get.snackbar('提示', '请先选择服务对象', snackPosition: SnackPosition.BOTTOM);
@@ -1958,6 +2047,51 @@ class _AIDialogContentState extends State<_AIDialogContent> {
           const SizedBox(width: 8),
           const Text('AI对话疗愈', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
           const SizedBox(width: 12),
+          // 网络状态指示
+          Obx(() {
+            final status = ctrl.networkStatus.value;
+            if (status == NetworkStatus.none) {
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.grey[200],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.signal_wifi_off, color: Colors.grey[600], size: 12),
+                    const SizedBox(width: 3),
+                    Text('离线', style: TextStyle(color: Colors.grey[600], fontSize: 11)),
+                  ],
+                ),
+              );
+            } else if (status == NetworkStatus.checking) {
+              return SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              );
+            } else {
+              final isWifi = status == NetworkStatus.wifi;
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.green[50],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.signal_wifi_4_bar, color: Colors.green[700], size: 12),
+                    const SizedBox(width: 3),
+                    Text(isWifi ? 'WiFi' : '4G', style: TextStyle(color: Colors.green[700], fontSize: 11)),
+                  ],
+                ),
+              );
+            }
+          }),
+          const SizedBox(width: 8),
           // 录音时长显示
           Obx(() {
             if (ctrl.isRecording.value) {
