@@ -21,6 +21,7 @@ class CustomerView extends GetView<CustomerCtrl> {
             phoneController.text = phone;
             controller.phone.value = phone;
             await _searchAndFill(phone);
+            Clipboard.setData(ClipboardData(text: ''));
           }
         }();
       }
