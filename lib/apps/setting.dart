@@ -22,7 +22,7 @@ class SettingView extends GetView<SettingCtrl> {
                 const SizedBox(height: 60),
                 ElevatedButton(onPressed: () => updateService.checkUpdate(from: "setting"), child: Text('检查 APP 更新')),
                 const SizedBox(height: 20),
-                MyTextP1("自定义检测页功能模块"),
+                MyTextP1("自定义脑波检测页功能模块"),
                 const SizedBox(height: 20),
                 Divider(height: 1, color: colorSurface),
                 const SizedBox(height: 20),

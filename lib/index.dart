@@ -52,7 +52,7 @@ class IndexView extends StatelessWidget {
             items: [
               BottomNavigationBarItem(icon: Icon(Icons.child_care_rounded), label: '欢迎'),
               BottomNavigationBarItem(icon: Icon(Icons.style), label: 'OH卡'),
-              BottomNavigationBarItem(icon: Icon(Icons.auto_graph_rounded), label: '检测'),
+              BottomNavigationBarItem(icon: Icon(Icons.auto_graph_rounded), label: '脑波'),
               BottomNavigationBarItem(icon: Icon(Icons.settings), label: '设置'),
             ],
           )),

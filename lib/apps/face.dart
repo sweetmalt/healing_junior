@@ -26,7 +26,7 @@ class FaceView extends GetView<FaceCtrl> {
             MyTextH1(controller.welcome),
             const SizedBox(height: 80),
             ElevatedButton(
-              child: MyTextH1("脑电检测"),
+              child: MyTextH1("脑波检测"),
               onPressed: () => indexCtrl.updateIndex(2),
             ),
             const SizedBox(height: 80),
