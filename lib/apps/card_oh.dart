@@ -658,19 +658,6 @@ class CardohCtrl extends GetxController {
       ),
     );
   }
-
-  /// AI对话入口
-  void showAIDialog() {
-    Get.snackbar(
-      '疗愈AI对话（下滑关闭）',
-      '功能开发中',
-      backgroundColor: const Color(0xFF2A2A4E),
-      colorText: Colors.white,
-      duration: const Duration(seconds: 3),
-      margin: const EdgeInsets.all(16),
-      snackPosition: SnackPosition.TOP,
-    );
-  }
 }
 
 /// 卡组选项
