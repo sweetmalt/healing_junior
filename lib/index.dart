@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:healing_junior/apps/card_oh.dart';
+import 'package:healing_junior/ctrl.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
@@ -1079,7 +1080,25 @@ class AIDialogCtrl extends GetxController {
 
   Future<void> startRecording() async {
     if (isRecording.value) return;
-
+    //
+    final customerCtrl = Get.find<CustomerCtrl>();
+    if (!customerCtrl.isLoaded.value) {
+      Get.snackbar('提示', '请先选择服务对象', snackPosition: SnackPosition.BOTTOM);
+      return;
+    }
+    if (!customerCtrl.isRecording.value) {
+      final myCtrl = Get.find<MyCtrl>();
+      Get.defaultDialog(
+        title: "提示",
+        middleText: "是否同步开启脑波检测？",
+        onConfirm: () {
+          myCtrl.clearData();
+          customerCtrl.isRecording.value = true;
+          Get.back();
+        },
+        onCancel: () => Get.back(),
+      );
+    }
     // 重置所有状态
     _resetState();
     _isSessionActive = true;
@@ -1134,6 +1153,20 @@ class AIDialogCtrl extends GetxController {
 
     // 判断是否显示"生成报告"按钮（文本超过100字）
     _showReportButton.value = currentFullText.value.length > 100;
+    //
+    final customerCtrl = Get.find<CustomerCtrl>();
+    if (customerCtrl.isRecording.value) {
+      final myCtrl = Get.find<MyCtrl>();
+      Get.defaultDialog(
+        title: "提示",
+        middleText: "是否同步停止脑波检测？",
+        onConfirm: () {
+          myCtrl.gameover();
+          Get.back();
+        },
+        onCancel: () => Get.back(),
+      );
+    }
   }
 
   // ==================== 报告相关方法 ====================

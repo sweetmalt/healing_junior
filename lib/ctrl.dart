@@ -318,7 +318,7 @@ class MyCtrl extends GetxController {
         double betaTrendSign = betaTrend["sign"];
         double gammaTrendSign = gammaTrend["sign"];
         trendCtrl.trend(deltaTrendSign, thetaTrendSign, alphaTrendSign, betaTrendSign, gammaTrendSign);
-        
+
         qingzhiCtrl.updateEmoValues([
           trendCtrl.emoValues[3], //喜
           trendCtrl.emoValues[1], //怒
@@ -336,26 +336,8 @@ class MyCtrl extends GetxController {
 
       ///BCI检测完毕
       if (bciDataDelta.length == customerCtrl.sampleSize.value) {
-        customerCtrl.isRecording.value = false; //停止BCI数据收集
-        //Get.snackbar("提示", "BCI 检测样本数达到要求");
-        // Map<String, dynamic> deltaTrend = Data.calculateTrendSign(bciDataDelta);
-        // Map<String, dynamic> thetaTrend = Data.calculateTrendSign(bciDataTheta);
-        // Map<String, dynamic> alphaTrend = Data.calculateTrendSign(bciDataAlpha);
-        // Map<String, dynamic> betaTrend = Data.calculateTrendSign(bciDataBeta);
-        // Map<String, dynamic> gammaTrend = Data.calculateTrendSign(bciDataGamma);
-        //brainLoadCtrl.load.value = deltaTrend["mv"] + thetaTrend["mv"] + alphaTrend["mv"] + betaTrend["mv"] + gammaTrend["mv"];
-        //pressureCtrl.psyPresssure.value = betaTrend["activity"] / (alphaTrend["activity"] + betaTrend["activity"]);
+        gameover();
         //
-        drawCtrl.att.value = Data.calculateMV(bciDataAtt).toInt();
-        drawCtrl.med.value = Data.calculateMV(bciDataMed).toInt();
-        drawCtrl.rel.value = ((100 - drawCtrl.att.value) / 2 + drawCtrl.med.value / 2).toInt();
-        drawCtrl.flu.value = (drawCtrl.att.value / 2 + drawCtrl.med.value / 2).toInt();
-        drawCtrl.hap.value = 100 - (pressureCtrl.psyPresssure.value * 100).toInt();
-        drawCtrl.isReady.value = true;
-        //
-
-        //if (hrvData.length == customerCtrl.sampleSize.value) {
-        //customerCtrl.isRecordingHrv.value = false;
         playAudio("1s Bell");
         Get.defaultDialog(
           title: "检测完毕",
@@ -364,20 +346,29 @@ class MyCtrl extends GetxController {
           barrierDismissible: false,
           onConfirm: () => Get.back(),
         );
-        customerCtrl.setSampleData({
-          "delta": bciDataDelta,
-          "theta": bciDataTheta,
-          "alpha": bciDataAlpha,
-          "beta": bciDataBeta,
-          "gamma": bciDataGamma,
-          "image_arg": [drawCtrl.att.value, drawCtrl.med.value, drawCtrl.rel.value, drawCtrl.flu.value, drawCtrl.hap.value],
-          "audio_arg": [wuluohaiCtrl.selectedIndex.value],
-          "timestamp": DateTime.now().millisecondsSinceEpoch,
-        });
-        //}
-        qingzhiCtrl.createCozePrompt("检测时长约${customerCtrl.sampleSize.value % 60 + 1}分钟");
       }
     }
+  }
+
+  void gameover() {
+    customerCtrl.isRecording.value = false; //停止BCI数据收集
+    drawCtrl.att.value = Data.calculateMV(bciDataAtt).toInt();
+    drawCtrl.med.value = Data.calculateMV(bciDataMed).toInt();
+    drawCtrl.rel.value = ((100 - drawCtrl.att.value) / 2 + drawCtrl.med.value / 2).toInt();
+    drawCtrl.flu.value = (drawCtrl.att.value / 2 + drawCtrl.med.value / 2).toInt();
+    drawCtrl.hap.value = 100 - (pressureCtrl.psyPresssure.value * 100).toInt();
+    drawCtrl.isReady.value = true;
+    customerCtrl.setSampleData({
+      "delta": bciDataDelta,
+      "theta": bciDataTheta,
+      "alpha": bciDataAlpha,
+      "beta": bciDataBeta,
+      "gamma": bciDataGamma,
+      "image_arg": [drawCtrl.att.value, drawCtrl.med.value, drawCtrl.rel.value, drawCtrl.flu.value, drawCtrl.hap.value],
+      "audio_arg": [wuluohaiCtrl.selectedIndex.value],
+      "timestamp": DateTime.now().millisecondsSinceEpoch,
+    });
+    qingzhiCtrl.createCozePrompt("检测时长约${customerCtrl.sampleSize.value % 60 + 1}分钟");
   }
 
   void clearData() {
@@ -389,49 +380,14 @@ class MyCtrl extends GetxController {
     bciDataAlpha.clear();
     bciDataBeta.clear();
     bciDataGamma.clear();
-    //bciDataTemperature.clear();
-    //bciDataHeartRate.clear();
     bciDataAtt.clear();
     bciDataMed.clear();
-    //hrvData.clear();
-    //
     baselineCtrl.init();
     brainLoadCtrl.init();
     drawCtrl.init();
     trendCtrl.init();
     qingzhiCtrl.init();
   }
-
-  // final List<double> hrvData = <double>[];
-  // final hrvCtrl = Get.put(HrvCtrl());
-  // void hrv(List<String> messages) {
-  //   if (messages.isNotEmpty && hrvData.length < customerCtrl.sampleSize.value) {
-  //     double last = 0.0;
-  //     if (hrvData.isNotEmpty) {
-  //       last = hrvData.last;
-  //     }
-  //     for (String item in messages) {
-  //       double x = double.parse(item);
-  //       if ((x - last).abs() >= 1) {
-  //         hrvData.add(x);
-  //         if ((x - last).abs() >= 50) {
-  //           hrvCtrl.nn50.value++;
-  //         } else if ((x - last).abs() >= 30 && (x - last).abs() < 50) {
-  //           hrvCtrl.nn30.value++;
-  //         } else {
-  //           hrvCtrl.nn10.value++;
-  //         }
-  //         hrvCtrl.nnCount.value = hrvCtrl.nn50.value + hrvCtrl.nn30.value + hrvCtrl.nn10.value;
-  //         last = x;
-  //         if (hrvData.length == 16) baselineCtrl.hrv.value = (baselineCtrl.median(hrvData)).toInt();
-  //         if (hrvData.length == customerCtrl.sampleSize.value) {
-  //           customerCtrl.isRecordingHrv.value = false; //停止HRV数据收集
-  //           break;
-  //         }
-  //       }
-  //     }
-  //   }
-  //}
 
   @override
   void onClose() {

@@ -237,7 +237,7 @@ class CustomerCtrl extends GetxController {
   final RxBool isLoaded = false.obs;
   final RxBool isRecording = false.obs;
   //final RxBool isRecordingHrv = false.obs;
-  final sampleSize = 256.obs;
+  final sampleSize = 2048.obs;
   final isNewSample = false.obs;
   final Map<String, dynamic> sampleData = {
     "record_data": {
@@ -259,7 +259,7 @@ class CustomerCtrl extends GetxController {
   };
   static const Map<String, dynamic> sample = {
     "size": [4096, 2048, 1024, 512, 256, 128, 64],
-    "title": ["光疗浅睡", "香疗小憩", "音疗正念", "瑜伽( 单人自习、双人互动、群体交流 )", "深呼吸习惯养成训练", "三分钟静息训练", "1分钟快速进入静息状态"],
+    "title": ["光疗浅睡", "OH卡疗愈、香疗小憩", "音疗正念", "瑜伽( 单人自习、双人互动、群体交流 )", "深呼吸习惯养成训练", "三分钟静息训练", "1分钟快速进入静息状态"],
     "sub_title": ["约80分钟", "约40分钟", "约20分钟", "约10分钟", "约  5分钟", "约  3分钟", "约  1分钟"]
   };
   @override
@@ -280,7 +280,7 @@ class CustomerCtrl extends GetxController {
     recordings.clear();
     isLoaded.value = false;
     isRecording.value = false;
-    sampleSize.value = 256;
+    sampleSize.value = 2048;
     isNewSample.value = false;
   }
 
