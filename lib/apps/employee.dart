@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:healing_junior/apps/draw.dart';
 import 'package:healing_junior/data.dart';
 import 'package:healing_junior/view.dart';
 import 'package:http/http.dart' as http;
@@ -314,8 +313,6 @@ class EmployeeCtrl extends GetxController {
         "is_lock": isLock.value,
       }, 'employee.json');
       paymentTemp.value += amount;
-      final drawCtrl = Get.find<DrawCtrl>();
-      drawCtrl.bearer.value = responseData['coze_token'];
       return responseData['coze_token'];
     }
   }

@@ -736,6 +736,9 @@ class CozeHintService {
         return '';
       }
       final token = await employeeCtrl.pay(0.1);
+      if (token.isNotEmpty) {
+        employeeCtrl.paymentTemp.value -= 0.1;
+      }
       return token;
     } catch (e) {
       return '';
@@ -880,6 +883,9 @@ $dialogContent''';
         return '';
       }
       final token = await employeeCtrl.pay(1);
+      if (token.isNotEmpty) {
+        employeeCtrl.paymentTemp.value -= 1;
+      }
       return token;
     } catch (e) {
       return '';
@@ -889,8 +895,8 @@ $dialogContent''';
 
 /// 重连进度信息
 class ReconnectInfo {
-  final int attempt;      // 当前第几次重连
-  final int maxAttempts;  // 最大重连次数
+  final int attempt; // 当前第几次重连
+  final int maxAttempts; // 最大重连次数
 
   ReconnectInfo({required this.attempt, required this.maxAttempts});
 
@@ -899,9 +905,9 @@ class ReconnectInfo {
 
 /// 网络状态枚举
 enum NetworkStatus {
-  none,     // 无网络
-  wifi,     // WiFi
-  mobile,   // 移动网络
+  none, // 无网络
+  wifi, // WiFi
+  mobile, // 移动网络
   checking, // 检查中
 }
 
