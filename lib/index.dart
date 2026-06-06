@@ -850,6 +850,10 @@ class AIDialogCtrl extends GetxController {
   final isRecording = false.obs;
   final errorMessage = ''.obs;
 
+  // ========== 录音时长 ==========
+  final elapsedSeconds = 0.obs; // 录音持续秒数
+  Timer? _elapsedTimer;
+
   // ========== 左侧：当前完整全文（覆盖显示，不是追加条目）==========
   final currentFullText = ''.obs;
   String _lastDisplayText = ''; // 上次显示的全文，用于去重
@@ -907,7 +911,30 @@ class AIDialogCtrl extends GetxController {
     _asrService.dispose();
     _reanalysisTimer?.cancel();
     _hintTimer?.cancel();
+    _elapsedTimer?.cancel();
     super.onClose();
+  }
+
+  /// 开始录音时长计时
+  void _startElapsedTimer() {
+    _elapsedTimer?.cancel();
+    elapsedSeconds.value = 0;
+    _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      elapsedSeconds.value++;
+    });
+  }
+
+  /// 停止录音时长计时
+  void _stopElapsedTimer() {
+    _elapsedTimer?.cancel();
+    _elapsedTimer = null;
+  }
+
+  /// 格式化时长为 MM:SS
+  String formatElapsedTime(int seconds) {
+    final mins = seconds ~/ 60;
+    final secs = seconds % 60;
+    return '${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
   }
 
   void _initASRService() {
@@ -917,14 +944,17 @@ class AIDialogCtrl extends GetxController {
           state.value = AIDialogState.recording;
           isRecording.value = true;
           errorMessage.value = '';
+          _startElapsedTimer();
           break;
         case 'idle':
           state.value = AIDialogState.idle;
           isRecording.value = false;
+          _stopElapsedTimer();
           break;
         case 'error':
           state.value = AIDialogState.error;
           isRecording.value = false;
+          _stopElapsedTimer();
           break;
         default:
           break;
@@ -1746,8 +1776,25 @@ class AIDialogSheet extends StatelessWidget {
   }
 }
 
-class _AIDialogContent extends StatelessWidget {
+class _AIDialogContent extends StatefulWidget {
   const _AIDialogContent();
+
+  @override
+  State<_AIDialogContent> createState() => _AIDialogContentState();
+}
+
+class _AIDialogContentState extends State<_AIDialogContent> {
+  // 用于左侧面板自动滚动
+  final ScrollController _leftScrollController = ScrollController();
+
+  // 记录上次显示的文本，用于检测变化
+  String _lastText = '';
+
+  @override
+  void dispose() {
+    _leftScrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1780,6 +1827,64 @@ class _AIDialogContent extends StatelessWidget {
     );
   }
 
+  /// 左侧：完整记录（显示最新全文，自动滚动到最新内容）
+  Widget _buildLeftPanel(AIDialogCtrl ctrl) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 标题
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          color: Colors.grey[100],
+          child: Row(
+            children: [
+              Icon(Icons.text_snippet, size: 16, color: Colors.grey[700]),
+              const SizedBox(width: 6),
+              Text('完整记录', style: TextStyle(fontSize: 13, color: Colors.grey[700], fontWeight: FontWeight.w500)),
+            ],
+          ),
+        ),
+        // 内容：直接显示最新全文（覆盖，不是追加）
+        Expanded(
+          child: Obx(() {
+            // 在Obx内部获取controller，才能正确监听observable变化
+            final aiCtrl = Get.find<AIDialogCtrl>();
+            final text = aiCtrl.currentFullText.value;
+
+            // 检测文本变化，自动滚动到底部
+            if (text.isNotEmpty && text != _lastText) {
+              _lastText = text;
+              // 延迟滚动，等待UI更新完成
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (_leftScrollController.hasClients) {
+                  _leftScrollController.animateTo(
+                    _leftScrollController.position.maxScrollExtent,
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeOut,
+                  );
+                }
+              });
+            }
+
+            if (text.isEmpty) {
+              return Center(
+                child: Text('完整记录将显示在这里...', style: TextStyle(color: Colors.grey[500])),
+              );
+            }
+            return SingleChildScrollView(
+              controller: _leftScrollController,
+              padding: const EdgeInsets.all(12),
+              child: Text(
+                text,
+                style: const TextStyle(fontSize: 14, height: 1.6),
+              ),
+            );
+          }),
+        ),
+      ],
+    );
+  }
+
   Widget _buildHeader(AIDialogCtrl ctrl) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1791,6 +1896,32 @@ class _AIDialogContent extends StatelessWidget {
         children: [
           const SizedBox(width: 8),
           const Text('AI对话疗愈', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          const SizedBox(width: 12),
+          // 录音时长显示
+          Obx(() {
+            if (ctrl.isRecording.value) {
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.red[50],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.red[200]!),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.fiber_manual_record, color: Colors.red[700], size: 12),
+                    const SizedBox(width: 4),
+                    Text(
+                      ctrl.formatElapsedTime(ctrl.elapsedSeconds.value),
+                      style: TextStyle(color: Colors.red[700], fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              );
+            }
+            return const SizedBox.shrink();
+          }),
           const Spacer(),
           Obx(() {
             if (ctrl.state.value == AIDialogState.connecting) {
@@ -1843,47 +1974,6 @@ class _AIDialogContent extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-
-  /// 左侧：完整记录（显示最新全文）
-  Widget _buildLeftPanel(AIDialogCtrl ctrl) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // 标题
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          color: Colors.grey[100],
-          child: Row(
-            children: [
-              Icon(Icons.text_snippet, size: 16, color: Colors.grey[700]),
-              const SizedBox(width: 6),
-              Text('完整记录', style: TextStyle(fontSize: 13, color: Colors.grey[700], fontWeight: FontWeight.w500)),
-            ],
-          ),
-        ),
-        // 内容：直接显示最新全文（覆盖，不是追加）
-        Expanded(
-          child: Obx(() {
-            // 在Obx内部获取controller，才能正确监听observable变化
-            final aiCtrl = Get.find<AIDialogCtrl>();
-            final text = aiCtrl.currentFullText.value;
-            if (text.isEmpty) {
-              return Center(
-                child: Text('完整记录将显示在这里...', style: TextStyle(color: Colors.grey[500])),
-              );
-            }
-            return SingleChildScrollView(
-              padding: const EdgeInsets.all(12),
-              child: Text(
-                text,
-                style: const TextStyle(fontSize: 14, height: 1.6),
-              ),
-            );
-          }),
-        ),
-      ],
     );
   }
 
