@@ -168,7 +168,7 @@ class CardohCtrl extends GetxController {
   static const double fourDrawSpacing = 60.0; // 四卡连抽槽位间距
 
   /// 四卡连抽模式下的标签
-  static const List<String> fourDrawLabels = ['当下', '卡点', '破局', '理想'];
+  static const List<String> fourDrawLabels = ['现状', '卡点', '突破', '理想'];
 
   // ==================== 卡组数据 ====================
 
@@ -282,7 +282,7 @@ class CardohCtrl extends GetxController {
         for (int i = 0; i < filledSlots.length && i < fourDrawCards.length; i++) {
           slotToCard[filledSlots[i]] = fourDrawCards[i];
         }
-        // 按位置顺序排列：[0]=当下, [1]=卡点, [2]=破局, [3]=理想
+        // 按位置顺序排列：[0]=现状, [1]=卡点, [2]=突破, [3]=理想
         final orderedCards = [
           slotToCard[0] ?? slotToCard.values.first,
           slotToCard[1] ?? slotToCard.values.first,
