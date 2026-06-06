@@ -1093,6 +1093,7 @@ class AIDialogCtrl extends GetxController {
         middleText: "是否同步开启脑波检测？",
         onConfirm: () {
           myCtrl.clearData();
+          customerCtrl.sampleSize.value = 2048;
           customerCtrl.isRecording.value = true;
           Get.back();
         },
