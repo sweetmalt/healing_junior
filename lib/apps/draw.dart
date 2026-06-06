@@ -314,12 +314,9 @@ class DrawCtrl extends GetxController {
       return;
     }
     if (employeeCtrl.paymentTemp.value < 2) {
-      bearer.value = await employeeCtrl.pay(2);
+      await employeeCtrl.pay(2);
     }
-    if (bearer.value.isEmpty) {
-      Get.snackbar("异常提示", "网络故障，请稍后重试");
-      return;
-    }
+
     String imagePrompt = "专注度${att.value}%、安全感${med.value}%、松弛感${rel.value}%、心流感${flu.value}% 愉悦感${hap.value}%";
     String randomStr = "意境：${contentTheme[Random().nextInt(contentTheme.length)]}";
     String randomStr2 = "意蕴：${auxiliaryElements[Random().nextInt(auxiliaryElements.length)]}";
