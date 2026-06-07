@@ -2072,16 +2072,24 @@ class _AIDialogContentState extends State<_AIDialogContent> {
               if (ctrl.errorMessage.isEmpty) return const SizedBox.shrink();
               return _buildErrorBanner(ctrl.errorMessage.value);
             }),
-            // 内容区：根据tab显示对应内容
+            // 内容区：根据tab显示对应内容（与选中标签融为一体）
             Expanded(
-              child: IndexedStack(
-                index: _selectedTab,
-                children: [
-                  // 0: 录音/完整记录
-                  _buildLeftPanel(ctrl),
-                  // 1: 提示问题
-                  _buildRightPanel(ctrl, _rightScrollController),
-                ],
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border(
+                    top: BorderSide(color: Colors.grey[200]!, width: 0.5),
+                  ),
+                ),
+                child: IndexedStack(
+                  index: _selectedTab,
+                  children: [
+                    // 0: 录音/完整记录
+                    _buildLeftPanel(ctrl),
+                    // 1: 提示问题
+                    _buildRightPanel(ctrl, _rightScrollController),
+                  ],
+                ),
               ),
             ),
             _buildActionBar(ctrl),
@@ -2097,17 +2105,13 @@ class _AIDialogContentState extends State<_AIDialogContent> {
       builder: (ctrl) {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
+          decoration: const BoxDecoration(
             color: Colors.white,
-            border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
           ),
           child: Row(
             children: [
-              // 对话标签
-              _buildTabButton('对话', 0),
-              const SizedBox(width: 8),
-              // 提问标签
-              _buildTabButton('提问', 1),
+              // 分页指示器（浏览器多页签风格）
+              _buildBrowserTabs(),
               const Spacer(),
               // 网络状态指示
               Obx(() {
@@ -2225,27 +2229,44 @@ class _AIDialogContentState extends State<_AIDialogContent> {
     );
   }
 
-  /// 单个标签按钮
-  Widget _buildTabButton(String label, int index) {
+  /// 浏览器多页签风格的标签切换
+  Widget _buildBrowserTabs() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey[200],
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // 对话标签
+          _buildBrowserTab('对话', 0),
+          // 提问标签
+          _buildBrowserTab('提问', 1),
+        ],
+      ),
+    );
+  }
+
+  /// 单个浏览器风格标签
+  Widget _buildBrowserTab(String label, int index) {
     final isSelected = _selectedTab == index;
     return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedTab = index;
-        });
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      onTap: () => setState(() => _selectedTab = index),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.purple : Colors.grey[200],
-          borderRadius: BorderRadius.circular(16),
+          color: isSelected ? Colors.white : Colors.transparent,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
         ),
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 12,
-            color: isSelected ? Colors.white : Colors.grey[700],
+            fontSize: 13,
+            color: isSelected ? Colors.black87 : Colors.grey[600],
             fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+            decoration: TextDecoration.none,
           ),
         ),
       ),
@@ -2257,18 +2278,6 @@ class _AIDialogContentState extends State<_AIDialogContent> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 标题
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          color: Colors.grey[100],
-          child: Row(
-            children: [
-              Icon(Icons.text_snippet, size: 16, color: Colors.grey[700]),
-              const SizedBox(width: 6),
-              Text('完整记录', style: TextStyle(fontSize: 13, color: Colors.grey[700], fontWeight: FontWeight.w500)),
-            ],
-          ),
-        ),
         // 内容：直接显示最新全文（覆盖，不是追加）
         Expanded(
           child: Obx(() {
@@ -2297,7 +2306,7 @@ class _AIDialogContentState extends State<_AIDialogContent> {
                   padding: const EdgeInsets.all(16),
                   child: Text(
                     '完整记录将显示在这里...',
-                    style: TextStyle(color: Colors.grey[400], fontSize: 11),
+                    style: TextStyle(color: Colors.grey[400], fontSize: 11, decoration: TextDecoration.none),
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -2369,12 +2378,12 @@ class _AIDialogContentState extends State<_AIDialogContent> {
               const SizedBox(height: 8),
               Text(
                 '点击下方按钮开始',
-                style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                style: TextStyle(color: Colors.grey[600], fontSize: 12, decoration: TextDecoration.none),
               ),
               const SizedBox(height: 4),
               Text(
                 '提示问题将在这里显示',
-                style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                style: TextStyle(color: Colors.grey[400], fontSize: 12, decoration: TextDecoration.none),
               ),
             ],
           ),
@@ -2388,10 +2397,10 @@ class _AIDialogContentState extends State<_AIDialogContent> {
             children: [
               Icon(Icons.mic, size: 48, color: Colors.green),
               const SizedBox(height: 8),
-              Text('正在聆听...', style: TextStyle(color: Colors.green[700], fontSize: 12)),
+              Text('正在聆听...', style: TextStyle(color: Colors.green[700], fontSize: 12, decoration: TextDecoration.none)),
               Text(
                 '提示问题生成中',
-                style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                style: TextStyle(color: Colors.grey[500], fontSize: 12, decoration: TextDecoration.none),
               ),
             ],
           ),
@@ -2445,7 +2454,7 @@ class _AIDialogContentState extends State<_AIDialogContent> {
         children: [
           // ========== 按钮区 ==========
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Obx(() {
               final aiCtrl = Get.find<AIDialogCtrl>();
               final recording = aiCtrl.isRecording.value;
@@ -2458,9 +2467,14 @@ class _AIDialogContentState extends State<_AIDialogContent> {
                   if (aiCtrl.showReportButton)
                     Padding(
                       padding: const EdgeInsets.only(right: 12),
-                      child: ElevatedButton.icon(
+                      child: ElevatedButton(
                         onPressed: aiCtrl.generateReport,
-                        icon: isGenerating
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        ),
+                        child: isGenerating
                             ? const SizedBox(
                                 width: 16,
                                 height: 16,
@@ -2469,38 +2483,30 @@ class _AIDialogContentState extends State<_AIDialogContent> {
                                   color: Colors.white,
                                 ),
                               )
-                            : const Icon(Icons.description),
-                        label: Text(isGenerating ? '生成中...' : '生成报告'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        ),
+                            : const Text('生成报告'),
                       ),
                     ),
 
                   // 录音按钮
                   if (!recording)
-                    ElevatedButton.icon(
+                    ElevatedButton(
                       onPressed: aiCtrl.startRecording,
-                      icon: const Icon(Icons.mic),
-                      label: const Text('开始AI分析'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.green,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
                       ),
+                      child: const Text('开始AI分析'),
                     )
                   else
-                    ElevatedButton.icon(
+                    ElevatedButton(
                       onPressed: aiCtrl.confirmStopRecording,
-                      icon: const Icon(Icons.stop),
-                      label: const Text('停止分析'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.red,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
                       ),
+                      child: const Text('停止分析'),
                     ),
                 ],
               );
