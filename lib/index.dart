@@ -82,11 +82,42 @@ class IndexView extends StatelessWidget {
   }
 
   void _showAIDialog(BuildContext context) {
-    Get.bottomSheet(
-      const AIDialogSheet(),
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      persistent: true,
+    final screenSize = MediaQuery.of(context).size;
+    final dialogWidth = screenSize.width * 0.5;
+    final dialogHeight = screenSize.height * 0.5;
+    // 右边距和下边距，与FAB保持一致（露出底部导航栏）
+    const rightMargin = 16.0;
+    const bottomMargin = 80.0;
+
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: '',
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 200),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return Stack(
+          children: [
+            // 点击外部关闭
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: () => Get.back(),
+                child: Container(color: Colors.transparent),
+              ),
+            ),
+            // 右下角对话框（留出边距，底部露出导航栏）
+            Positioned(
+              right: rightMargin,
+              bottom: bottomMargin,
+              child: SizedBox(
+                width: dialogWidth,
+                height: dialogHeight,
+                child: const AIDialogSheet(),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -1984,10 +2015,16 @@ class AIDialogSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: MediaQuery.of(context).size.height * 0.85,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.15),
+            blurRadius: 10,
+            offset: const Offset(-2, -2),
+          ),
+        ],
       ),
       child: const _AIDialogContent(),
     );
@@ -2011,6 +2048,8 @@ class _AIDialogContentState extends State<_AIDialogContent> {
   String _lastText = '';
   // 记录上次提示数量，用于检测变化
   int _lastHintCount = 0;
+  // 当前选中的标签：0=录音, 1=提示
+  int _selectedTab = 0;
 
   @override
   void dispose() {
@@ -2026,20 +2065,22 @@ class _AIDialogContentState extends State<_AIDialogContent> {
       builder: (ctrl) {
         return Column(
           children: [
-            _buildHeader(ctrl),
+            // ========== 顶部标签切换 ==========
+            _buildTabBar(),
+            // 错误提示
             Obx(() {
               if (ctrl.errorMessage.isEmpty) return const SizedBox.shrink();
               return _buildErrorBanner(ctrl.errorMessage.value);
             }),
+            // 内容区：根据tab显示对应内容
             Expanded(
-              child: Row(
+              child: IndexedStack(
+                index: _selectedTab,
                 children: [
-                  // ========== 左侧：完整记录 ==========
-                  Expanded(child: _buildLeftPanel(ctrl)),
-                  // 分隔线
-                  Container(width: 1, color: Colors.grey[300]),
-                  // ========== 右侧：对话区域 ==========
-                  Expanded(child: _buildRightPanel(ctrl, _rightScrollController)),
+                  // 0: 录音/完整记录
+                  _buildLeftPanel(ctrl),
+                  // 1: 提示问题
+                  _buildRightPanel(ctrl, _rightScrollController),
                 ],
               ),
             ),
@@ -2047,6 +2088,167 @@ class _AIDialogContentState extends State<_AIDialogContent> {
           ],
         );
       },
+    );
+  }
+
+  /// 顶部标签切换栏（包含网络状态、关闭按钮等）
+  Widget _buildTabBar() {
+    return GetBuilder<AIDialogCtrl>(
+      builder: (ctrl) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
+          ),
+          child: Row(
+            children: [
+              // 对话标签
+              _buildTabButton('对话', 0),
+              const SizedBox(width: 8),
+              // 提问标签
+              _buildTabButton('提问', 1),
+              const Spacer(),
+              // 网络状态指示
+              Obx(() {
+                final status = ctrl.networkStatus.value;
+                if (status == NetworkStatus.none) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[200],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.signal_wifi_off, color: Colors.grey[600], size: 12),
+                        const SizedBox(width: 3),
+                        Text('离线', style: TextStyle(color: Colors.grey[600], fontSize: 11)),
+                      ],
+                    ),
+                  );
+                } else if (status == NetworkStatus.checking) {
+                  return SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  );
+                } else {
+                  final isWifi = status == NetworkStatus.wifi;
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.green[50],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.signal_wifi_4_bar, color: Colors.green[700], size: 12),
+                        const SizedBox(width: 3),
+                        Text(isWifi ? 'WiFi' : '4G', style: TextStyle(color: Colors.green[700], fontSize: 11)),
+                      ],
+                    ),
+                  );
+                }
+              }),
+              const SizedBox(width: 8),
+              // 重连进度显示
+              Obx(() {
+                final info = ctrl.reconnectInfo.value;
+                if (info != null) {
+                  return Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.orange[100],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.orange[700],
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          info.displayText,
+                          style: TextStyle(color: Colors.orange[700], fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                return const SizedBox.shrink();
+              }),
+              Obx(() {
+                if (ctrl.state.value == AIDialogState.connecting) {
+                  return Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.orange[100],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2)),
+                        const SizedBox(width: 4),
+                        Text('连接中...', style: TextStyle(color: Colors.orange[700], fontSize: 12)),
+                      ],
+                    ),
+                  );
+                }
+                return const SizedBox.shrink();
+              }),
+              const SizedBox(width: 4),
+              IconButton(
+                icon: const Icon(Icons.close, size: 20),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: () {
+                  // 只关闭窗体，不影响录音状态
+                  Get.back();
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// 单个标签按钮
+  Widget _buildTabButton(String label, int index) {
+    final isSelected = _selectedTab == index;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedTab = index;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.purple : Colors.grey[200],
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: isSelected ? Colors.white : Colors.grey[700],
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+          ),
+        ),
+      ),
     );
   }
 
@@ -2091,7 +2293,14 @@ class _AIDialogContentState extends State<_AIDialogContent> {
 
             if (text.isEmpty) {
               return Center(
-                child: Text('完整记录将显示在这里...', style: TextStyle(color: Colors.grey[500])),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    '完整记录将显示在这里...',
+                    style: TextStyle(color: Colors.grey[400], fontSize: 11),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
               );
             }
             return SingleChildScrollView(
@@ -2105,156 +2314,6 @@ class _AIDialogContentState extends State<_AIDialogContent> {
           }),
         ),
       ],
-    );
-  }
-
-  Widget _buildHeader(AIDialogCtrl ctrl) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
-      ),
-      child: Row(
-        children: [
-          const SizedBox(width: 8),
-          const Text('AI对话疗愈', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-          const SizedBox(width: 12),
-          // 网络状态指示
-          Obx(() {
-            final status = ctrl.networkStatus.value;
-            if (status == NetworkStatus.none) {
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Colors.grey[200],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.signal_wifi_off, color: Colors.grey[600], size: 12),
-                    const SizedBox(width: 3),
-                    Text('离线', style: TextStyle(color: Colors.grey[600], fontSize: 11)),
-                  ],
-                ),
-              );
-            } else if (status == NetworkStatus.checking) {
-              return SizedBox(
-                width: 12,
-                height: 12,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              );
-            } else {
-              final isWifi = status == NetworkStatus.wifi;
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Colors.green[50],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.signal_wifi_4_bar, color: Colors.green[700], size: 12),
-                    const SizedBox(width: 3),
-                    Text(isWifi ? 'WiFi' : '4G', style: TextStyle(color: Colors.green[700], fontSize: 11)),
-                  ],
-                ),
-              );
-            }
-          }),
-          const SizedBox(width: 8),
-          // 录音时长显示
-          Obx(() {
-            if (ctrl.isRecording.value) {
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.red[50],
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.red[200]!),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.fiber_manual_record, color: Colors.red[700], size: 12),
-                    const SizedBox(width: 4),
-                    Text(
-                      ctrl.formatElapsedTime(ctrl.elapsedSeconds.value),
-                      style: TextStyle(color: Colors.red[700], fontSize: 13, fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                ),
-              );
-            }
-            return const SizedBox.shrink();
-          }),
-          const Spacer(),
-          // 重连进度显示
-          Obx(() {
-            final info = ctrl.reconnectInfo.value;
-            if (info != null) {
-              return Container(
-                margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.orange[100],
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      width: 12,
-                      height: 12,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.orange[700],
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      info.displayText,
-                      style: TextStyle(color: Colors.orange[700], fontSize: 12),
-                    ),
-                  ],
-                ),
-              );
-            }
-            return const SizedBox.shrink();
-          }),
-          Obx(() {
-            if (ctrl.state.value == AIDialogState.connecting) {
-              return Container(
-                margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.orange[100],
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2)),
-                    const SizedBox(width: 4),
-                    Text('连接中...', style: TextStyle(color: Colors.orange[700], fontSize: 12)),
-                  ],
-                ),
-              );
-            }
-            return const SizedBox.shrink();
-          }),
-          const SizedBox(width: 8),
-          IconButton(
-            icon: const Icon(Icons.close),
-            onPressed: () {
-              // 只关闭窗体，不影响录音状态
-              Get.back();
-            },
-          ),
-        ],
-      ),
     );
   }
 
@@ -2310,7 +2369,7 @@ class _AIDialogContentState extends State<_AIDialogContent> {
               const SizedBox(height: 8),
               Text(
                 '点击下方按钮开始',
-                style: TextStyle(color: Colors.grey[600]),
+                style: TextStyle(color: Colors.grey[600], fontSize: 12),
               ),
               const SizedBox(height: 4),
               Text(
@@ -2329,7 +2388,7 @@ class _AIDialogContentState extends State<_AIDialogContent> {
             children: [
               Icon(Icons.mic, size: 48, color: Colors.green),
               const SizedBox(height: 8),
-              Text('正在聆听...', style: TextStyle(color: Colors.green[700])),
+              Text('正在聆听...', style: TextStyle(color: Colors.green[700], fontSize: 12)),
               Text(
                 '提示问题生成中',
                 style: TextStyle(color: Colors.grey[500], fontSize: 12),
@@ -2425,7 +2484,7 @@ class _AIDialogContentState extends State<_AIDialogContent> {
                     ElevatedButton.icon(
                       onPressed: aiCtrl.startRecording,
                       icon: const Icon(Icons.mic),
-                      label: const Text('开始录音'),
+                      label: const Text('开始AI分析'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.green,
                         foregroundColor: Colors.white,
@@ -2436,7 +2495,7 @@ class _AIDialogContentState extends State<_AIDialogContent> {
                     ElevatedButton.icon(
                       onPressed: aiCtrl.confirmStopRecording,
                       icon: const Icon(Icons.stop),
-                      label: const Text('停止录音'),
+                      label: const Text('停止分析'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.red,
                         foregroundColor: Colors.white,
