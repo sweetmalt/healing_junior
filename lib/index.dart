@@ -1012,6 +1012,15 @@ class AIDialogCtrl extends GetxController {
   final isGeneratingReport = false.obs; // 是否正在生成报告
   final _showReportButton = false.obs; // 是否显示"生成报告"按钮
   final cardohReportMarkdown = "".obs;
+  final _readReports = <String>{}.obs; // 已读报告文件名集合
+
+  /// 检查报告是否已读
+  bool isReportRead(String fileName) => _readReports.contains(fileName);
+
+  /// 标记报告为已读
+  void markReportRead(String fileName) {
+    _readReports.add(fileName);
+  }
 
   // ========== 说话人分析 ==========
   final Map<int, SpeakerRoleInfo> _speakerInfos = {};
@@ -2017,7 +2026,7 @@ class AIDialogSheet extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.15),
@@ -2026,6 +2035,7 @@ class AIDialogSheet extends StatelessWidget {
           ),
         ],
       ),
+      clipBehavior: Clip.antiAlias,
       child: const _AIDialogContent(),
     );
   }
@@ -2598,37 +2608,63 @@ class _ReportFileIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 60,
-        margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.grey[300]!),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 2,
-              offset: const Offset(0, 1),
-            ),
-          ],
+    final ctrl = Get.find<AIDialogCtrl>();
+    return Obx(() {
+      final isRead = ctrl.isReportRead(report.fileName);
+      return GestureDetector(
+        onTap: () {
+          ctrl.markReportRead(report.fileName);
+          onTap();
+        },
+        child: Container(
+          width: 60,
+          margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey[300]!),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 2,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.description, color: Colors.blue[600], size: 24),
+                  const SizedBox(height: 2),
+                  Text(
+                    _formatDate(report.createdAt),
+                    style: TextStyle(fontSize: 9, color: Colors.grey[600]),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+              // 未读小红点
+              if (!isRead)
+                Positioned(
+                  top: -2,
+                  right: -2,
+                  child: Container(
+                    width: 10,
+                    height: 10,
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.description, color: Colors.blue[600], size: 24),
-            const SizedBox(height: 2),
-            Text(
-              _formatDate(report.createdAt),
-              style: TextStyle(fontSize: 9, color: Colors.grey[600]),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
-      ),
-    );
+      );
+    });
   }
 
   String _formatDate(DateTime date) {
@@ -2782,7 +2818,7 @@ class _HintBubble extends StatelessWidget {
           Expanded(
             child: Text(
               text,
-              style: TextStyle(color: Colors.amber[900], fontSize: 13, fontStyle: FontStyle.italic),
+              style: TextStyle(color: Colors.amber[900], fontSize: 13),
             ),
           ),
         ],
