@@ -1,5 +1,7 @@
 import 'dart:math';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 
 /// ============================================================
@@ -16,9 +18,23 @@ enum CardohPhase {
 /// 控制器
 /// ============================================================
 class CardohCtrl extends GetxController {
+  /// 预加载的卡背图片（用于ShufflePainter）
+  static ui.Image? cardBackImage;
+
+  /// 加载卡背图片
+  static Future<void> loadCardBackImage() async {
+    if (cardBackImage != null) return;
+    final bytes = await rootBundle.load('assets/images/card_one_bk.jpg');
+    final codec = await ui.instantiateImageCodec(bytes.buffer.asUint8List());
+    final frame = await codec.getNextFrame();
+    cardBackImage = frame.image;
+  }
+
   @override
   void onInit() {
     super.onInit();
+    // 预加载卡背图片
+    loadCardBackImage();
     // 首次进入默认选择基础卡
     selectedDeck.value = 1;
     // 初始化基础卡数据
@@ -785,7 +801,12 @@ class CardohView extends StatelessWidget {
     final controller = Get.put(CardohCtrl());
 
     return Container(
-      color: const Color(0xFFE0F7FA),
+      decoration: const BoxDecoration(
+        image: DecorationImage(
+          image: AssetImage('assets/images/card_win_bk.jpg'),
+          fit: BoxFit.cover,
+        ),
+      ),
       child: LayoutBuilder(
         builder: (context, constraints) {
           return Stack(
@@ -895,13 +916,9 @@ class _StackedCardsView extends StatelessWidget {
               height: 80 - offset * 1.2,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(6),
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFFB2DFDB), // 比背景 E0F7FA 深一点
-                    Color(0xFF80CBC4),
-                  ],
+                image: const DecorationImage(
+                  image: AssetImage('assets/images/card_one_bk.jpg'),
+                  fit: BoxFit.cover,
                 ),
                 boxShadow: [
                   BoxShadow(
@@ -910,10 +927,6 @@ class _StackedCardsView extends StatelessWidget {
                     offset: Offset(1 - offset * 0.1, 2 - offset * 0.15),
                   ),
                 ],
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.5),
-                  width: 1,
-                ),
               ),
             ),
           );
@@ -922,10 +935,6 @@ class _StackedCardsView extends StatelessWidget {
     );
   }
 }
-
-/// ============================================================
-/// 洗牌动画页面
-/// ============================================================
 class _ShufflePage extends StatefulWidget {
   final CardohCtrl controller;
 
@@ -1090,6 +1099,7 @@ class _ShufflePageState extends State<_ShufflePage> with TickerProviderStateMixi
               cardH: _cardHAnim.value,
               cardTargets: _cardTargets,
               centerX: MediaQuery.of(context).size.width / 2,
+              cardBackImage: CardohCtrl.cardBackImage,
             ),
           );
         },
@@ -1131,6 +1141,7 @@ class _ShufflePainter extends CustomPainter {
   final double cardH; // 当前卡牌高度
   final List<_CardTarget> cardTargets;
   final double centerX; // 屏幕中心X
+  final ui.Image? cardBackImage; // 预加载的卡背图片
 
   _ShufflePainter({
     required this.shuffleProgress,
@@ -1141,6 +1152,7 @@ class _ShufflePainter extends CustomPainter {
     required this.cardH,
     required this.cardTargets,
     required this.centerX,
+    this.cardBackImage,
   });
 
   @override
@@ -1186,24 +1198,12 @@ class _ShufflePainter extends CustomPainter {
       // 旋转角度：从初始角度插值到最终角度
       final currentRotation = target.initialRotation + (target.finalRotation - target.initialRotation) * curved;
 
-      // 绘制卡牌（统一深色背面）
+      // 绘制卡牌
       final rect = Rect.fromCenter(
         center: Offset(currentX, currentY),
         width: cardW,
         height: cardH,
       );
-
-      // 渐变画笔（比背景 E0F7FA 深一点）
-      final gradientPaint = Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFFB2DFDB),
-            Color(0xFF80CBC4),
-          ],
-        ).createShader(rect)
-        ..style = PaintingStyle.fill;
 
       canvas.save();
       canvas.translate(currentX, currentY);
@@ -1212,14 +1212,29 @@ class _ShufflePainter extends CustomPainter {
 
       // 卡牌矩形
       final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(8));
-      canvas.drawRRect(rrect, gradientPaint);
 
-      // 卡牌边框
-      final borderPaint = Paint()
-        ..color = Colors.white.withValues(alpha: 0.5)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5;
-      canvas.drawRRect(rrect, borderPaint);
+      // 如果有预加载的卡背图片，绘制图片；否则使用渐变
+      if (cardBackImage != null) {
+        canvas.drawImageRect(
+          cardBackImage!,
+          Rect.fromLTWH(0, 0, cardBackImage!.width.toDouble(), cardBackImage!.height.toDouble()),
+          rect,
+          Paint(),
+        );
+      } else {
+        // 渐变画笔（备用）
+        final gradientPaint = Paint()
+          ..shader = const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFFB2DFDB),
+              Color(0xFF80CBC4),
+            ],
+          ).createShader(rect)
+          ..style = PaintingStyle.fill;
+        canvas.drawRRect(rrect, gradientPaint);
+      }
 
       canvas.restore();
     }
@@ -1255,17 +1270,9 @@ class _CircleCard extends StatelessWidget {
       height: cardH,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFFB2DFDB), // 比背景 E0F7FA 深一点
-            Color(0xFF80CBC4),
-          ],
-        ),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.5),
-          width: 1.5,
+        image: const DecorationImage(
+          image: AssetImage('assets/images/card_one_bk.jpg'),
+          fit: BoxFit.cover,
         ),
         boxShadow: [
           BoxShadow(
@@ -1343,7 +1350,6 @@ class _DrawnCardsBar extends StatelessWidget {
       if (isEmpty) {
         return Container(
           height: 80,
-          color: const Color(0xFFB2DFDB).withValues(alpha: 0.5),
           child: const Center(
             child: Text(
               '已抽卡将显示在这里',
@@ -1355,7 +1361,6 @@ class _DrawnCardsBar extends StatelessWidget {
 
       return Container(
         height: 80,
-        color: const Color(0xFFB2DFDB).withValues(alpha: 0.9),
         child: ListView.builder(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
@@ -1758,6 +1763,10 @@ class _FanCard extends StatelessWidget {
         height: cardH,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(10),
+          image: const DecorationImage(
+            image: AssetImage('assets/images/card_one_bk.jpg'),
+            fit: BoxFit.cover,
+          ),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.3),
@@ -1765,22 +1774,6 @@ class _FanCard extends StatelessWidget {
               offset: const Offset(3, 5),
             ),
           ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: Image.asset(
-            'assets/images/card_oh/$deckType/${cardId.toString().padLeft(2, '0')}.jpg',
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(
-              color: Colors.grey[400],
-              child: Center(
-                child: Text(
-                  cardId.toString(),
-                  style: const TextStyle(color: Colors.white, fontSize: 24),
-                ),
-              ),
-            ),
-          ),
         ),
       ),
     );
@@ -2194,27 +2187,9 @@ class _FlyingCardState extends State<_FlyingCard> {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFFB2DFDB), // 比背景 E0F7FA 深一点
-            Color(0xFF80CBC4),
-          ],
-        ),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.5),
-          width: 1.5,
-        ),
-      ),
-      child: const Center(
-        child: Text(
-          '?',
-          style: TextStyle(
-            color: Color(0xFF00695C), // 深青色
-            fontSize: 48,
-            fontWeight: FontWeight.bold,
-          ),
+        image: const DecorationImage(
+          image: AssetImage('assets/images/card_one_bk.jpg'),
+          fit: BoxFit.cover,
         ),
       ),
     );
