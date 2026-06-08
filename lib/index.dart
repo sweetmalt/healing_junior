@@ -14,6 +14,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:record/record.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:printing/printing.dart';
 import 'package:markdown/markdown.dart' as md;
@@ -537,6 +538,8 @@ class VolcASRService {
       if (utterances == null || utterances.isEmpty) return;
 
       final speakerTexts = <MapEntry<int, String>>[];
+      final definiteUtterances = <DefiniteUtterance>[];
+
       for (final utt in utterances) {
         // 获取 text
         final uttText = utt['text'];
@@ -555,6 +558,17 @@ class VolcASRService {
         }
 
         speakerTexts.add(MapEntry(speakerId, uttText.toString().trim()));
+
+        // 检测 definite 字段（true=已确定，不会再被修改）
+        final definite = utt['definite'];
+        if (definite == true) {
+          final endTime = utt['end_time'] as int? ?? 0;
+          definiteUtterances.add(DefiniteUtterance(
+            speakerId: speakerId,
+            text: uttText.toString().trim(),
+            endTime: endTime,
+          ));
+        }
       }
       if (speakerTexts.isEmpty) return;
 
@@ -563,6 +577,7 @@ class VolcASRService {
         text: combinedText,
         speakerTexts: speakerTexts,
         timestamp: DateTime.now(),
+        definiteUtterances: definiteUtterances,
       ));
     } catch (_) {}
   }
@@ -573,15 +588,30 @@ class VolcASRService {
   }
 }
 
+/// 已确定的 utterance（用于创建混合事件快照）
+class DefiniteUtterance {
+  final int speakerId;
+  final String text;
+  final int endTime; // 毫秒，从录音开始计
+
+  DefiniteUtterance({
+    required this.speakerId,
+    required this.text,
+    required this.endTime,
+  });
+}
+
 class ASRResult {
   final String text; // 所有speaker的完整累积文本（用于左侧显示）
   final List<MapEntry<int, String>> speakerTexts; // 每个speaker的累积文本（用于分析）
   final DateTime timestamp;
+  final List<DefiniteUtterance> definiteUtterances; // 已确定的 utterance（用于混合事件）
 
   ASRResult({
     required this.text,
     required this.speakerTexts,
     required this.timestamp,
+    this.definiteUtterances = const [],
   });
 }
 
@@ -593,12 +623,19 @@ class _EmotionEvent {
 }
 
 /// 混合事件（用于生成混合文本）
+/// 混合事件（用于实时混合显示和报告生成）
 class _MixedEvent {
-  final DateTime timestamp;
+  final DateTime timestamp; // 事件时间戳（录音开始为基准的相对时间，用于排序）
   final String type; // 'dialog' or 'emotion'
-  final int? speakerId;
-  final String text;
-  _MixedEvent({required this.timestamp, required this.type, this.speakerId, required this.text});
+  final int? speakerId; // 仅 dialog 类型使用
+  final String text; // 对话文本或情绪文本
+
+  _MixedEvent({
+    required this.timestamp,
+    required this.type,
+    this.speakerId,
+    required this.text,
+  });
 }
 
 // ==================== 说话人角色 ====================
@@ -988,16 +1025,26 @@ class AIDialogCtrl extends GetxController {
   // ========== 情绪事件（用于混合显示）==========
   final List<_EmotionEvent> _emotionEvents = [];
 
+  // ========== 混合事件列表（用于实时混合显示、提示问题、报告生成）==========
+  final mixedEvents = <_MixedEvent>[].obs;
+
   /// 注入情绪事件（供脑电波监测模块调用）
   /// 注意：此方法只存储情绪事件，不影响语音识别的实时显示
   void injectEmotion(String emotion) {
     if (!_isSessionActive) return;
-    _emotionEvents.add(_EmotionEvent(
+
+    final emotionEvent = _EmotionEvent(
       timestamp: DateTime.now(),
       emotion: emotion,
+    );
+    _emotionEvents.add(emotionEvent);
+
+    // 同时添加到混合事件列表（用于实时混合显示）
+    mixedEvents.add(_MixedEvent(
+      timestamp: emotionEvent.timestamp,
+      type: 'emotion',
+      text: emotion,
     ));
-    // 不更新 currentFullText，保持原有语音识别显示不变
-    // 情绪内容只在报告生成时混入
   }
 
   // ========== 右侧：对话区域 ==========
@@ -1020,6 +1067,7 @@ class AIDialogCtrl extends GetxController {
   /// 标记报告为已读
   void markReportRead(String fileName) {
     _readReports.add(fileName);
+    _saveReadReports(); // 持久化保存
   }
 
   // ========== 说话人分析 ==========
@@ -1036,6 +1084,7 @@ class AIDialogCtrl extends GetxController {
     super.onInit();
     _initASRService();
     _loadReportList();
+    _loadReadReports(); // 加载已读报告状态
     _initConnectivityListener();
   }
 
@@ -1236,6 +1285,25 @@ class AIDialogCtrl extends GetxController {
       }
     }
 
+    // 处理已确定的 utterance，创建混合事件（用于实时混合显示）
+    if (result.definiteUtterances.isNotEmpty) {
+      for (final defUtt in result.definiteUtterances) {
+        // 去重：检查该文本是否已添加过（使用 speakerId + text 组合）
+        final isDuplicate = mixedEvents.any(
+          (e) => e.type == 'dialog' && e.speakerId == defUtt.speakerId && e.text == defUtt.text,
+        );
+        if (!isDuplicate) {
+          // 统一使用本机时间戳（与情绪事件保持一致）
+          mixedEvents.add(_MixedEvent(
+            timestamp: DateTime.now(),
+            type: 'dialog',
+            speakerId: defUtt.speakerId,
+            text: defUtt.text,
+          ));
+        }
+      }
+    }
+
     // 保持原有显示方式：拼接带说话人标记的完整文本
     // speaker_id=0 → 某人, 1 → A, 2 → B, 3 → C...
     final markedText = result.speakerTexts.map((e) {
@@ -1254,38 +1322,14 @@ class AIDialogCtrl extends GetxController {
   }
 
   /// 生成混合文本（对话 + 情绪，用于报告和提示问题）
+  /// 直接使用实时记录的 mixedEvents 列表
   String _generateMixedText() {
-    // 收集所有事件
-    final allEvents = <_MixedEvent>[];
+    if (mixedEvents.isEmpty) return '';
 
-    // 添加对话事件（使用当前 _speakerTexts）
-    final now = DateTime.now();
-    int idx = 0;
-    for (final entry in _speakerTexts.entries) {
-      allEvents.add(_MixedEvent(
-        timestamp: now.subtract(Duration(seconds: _speakerTexts.length - idx)),
-        type: 'dialog',
-        speakerId: entry.key,
-        text: entry.value,
-      ));
-      idx++;
-    }
-
-    // 添加情绪事件
-    for (final e in _emotionEvents) {
-      allEvents.add(_MixedEvent(
-        timestamp: e.timestamp,
-        type: 'emotion',
-        text: e.emotion,
-      ));
-    }
-
-    // 按时间排序
-    allEvents.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-
-    // 生成混合文本
+    // mixedEvents 已经在录音过程中按时间顺序添加
+    // 只需要直接生成文本
     final lines = <String>[];
-    for (final e in allEvents) {
+    for (final e in mixedEvents) {
       if (e.type == 'dialog') {
         String label;
         if (e.speakerId == null || e.speakerId == 0) {
@@ -1380,6 +1424,7 @@ class AIDialogCtrl extends GetxController {
     _speakerInfos.clear();
     _nextLabelIndex = 0;
     _emotionEvents.clear();
+    mixedEvents.clear();
     errorMessage.value = '';
     cardohReportMarkdown.value = '';
     reconnectInfo.value = null;
@@ -1499,6 +1544,23 @@ class AIDialogCtrl extends GetxController {
       // 按时间倒序排列，最新的在最前面
       reports.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       reportList.assignAll(reports);
+    } catch (_) {}
+  }
+
+  /// 从本地存储加载已读报告列表
+  Future<void> _loadReadReports() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final readList = prefs.getStringList('readReports') ?? [];
+      _readReports.assignAll(readList.toSet());
+    } catch (_) {}
+  }
+
+  /// 保存已读报告列表到本地存储
+  Future<void> _saveReadReports() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList('readReports', _readReports.toList());
     } catch (_) {}
   }
 
@@ -2054,8 +2116,6 @@ class _AIDialogContentState extends State<_AIDialogContent> {
   // 用于右侧提示列表自动滚动
   final ScrollController _rightScrollController = ScrollController();
 
-  // 记录上次显示的文本，用于检测变化
-  String _lastText = '';
   // 记录上次提示数量，用于检测变化
   int _lastHintCount = 0;
   // 当前选中的标签：0=录音, 1=提示
@@ -2283,21 +2343,20 @@ class _AIDialogContentState extends State<_AIDialogContent> {
     );
   }
 
-  /// 左侧：完整记录（显示最新全文，自动滚动到最新内容）
+  /// 左侧：完整记录（显示混合事件列表：对话+情绪）
   Widget _buildLeftPanel(AIDialogCtrl ctrl) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 内容：直接显示最新全文（覆盖，不是追加）
+        // 内容：渲染混合事件列表（对话+情绪）
         Expanded(
           child: Obx(() {
             // 在Obx内部获取controller，才能正确监听observable变化
             final aiCtrl = Get.find<AIDialogCtrl>();
-            final text = aiCtrl.currentFullText.value;
+            final events = aiCtrl.mixedEvents;
 
-            // 检测文本变化，自动滚动到底部
-            if (text.isNotEmpty && text != _lastText) {
-              _lastText = text;
+            // 检测事件列表变化，自动滚动到底部
+            if (events.isNotEmpty) {
               // 延迟滚动，等待UI更新完成
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (_leftScrollController.hasClients) {
@@ -2310,7 +2369,7 @@ class _AIDialogContentState extends State<_AIDialogContent> {
               });
             }
 
-            if (text.isEmpty) {
+            if (events.isEmpty) {
               return Center(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -2322,13 +2381,50 @@ class _AIDialogContentState extends State<_AIDialogContent> {
                 ),
               );
             }
-            return SingleChildScrollView(
+
+            return ListView.builder(
               controller: _leftScrollController,
               padding: const EdgeInsets.all(12),
-              child: Text(
-                text,
-                style: const TextStyle(fontSize: 14, height: 1.6),
-              ),
+              itemCount: events.length,
+              itemBuilder: (context, index) {
+                final e = events[index];
+                if (e.type == 'dialog') {
+                  // 对话事件：显示说话人标签和文本
+                  String label;
+                  if (e.speakerId == null || e.speakerId == 0) {
+                    label = '某';
+                  } else {
+                    label = String.fromCharCode(65 + e.speakerId! - 1);
+                  }
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      '【$label说】：${e.text}',
+                      style: const TextStyle(fontSize: 14, height: 1.6),
+                    ),
+                  );
+                } else {
+                  // 情绪事件：显示情绪图标和文本（橙色高亮）
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.orange[50],
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '💭 ${e.text}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.orange[700],
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  );
+                }
+              },
             );
           }),
         ),
