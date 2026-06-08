@@ -1439,15 +1439,12 @@ class AIDialogCtrl extends GetxController {
 
     for (final e in allEvents) {
       if (e.type == 'dialog') {
-        String label;
-        if (e.speakerId == null || e.speakerId == 0) {
-          label = '某';
-        } else {
-          label = String.fromCharCode(65 + e.speakerId! - 1);
-        }
-        lines.add('【$label说】：${e.text}');
+        // 使用 getSpeakerLabel 保持与左侧显示一致
+        final label = getSpeakerLabel(e.speakerId);
+        lines.add('$label说：${e.text}');
       } else {
-        lines.add('💭 ${e.text}');
+        // 情绪事件只显示文本，无图标（与左侧显示一致）
+        lines.add(e.text);
       }
     }
 
