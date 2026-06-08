@@ -1049,6 +1049,29 @@ class AIDialogCtrl extends GetxController {
   // ========== 每个speaker的累积文本（用于分析和整理）==========
   final Map<int, String> _speakerTexts = {};
 
+  // ========== 说话人ID动态映射（解决ASR返回speakerId=0时的显示问题）==========
+  // 原始speakerId -> 显示标签（A/B/C...）
+  final Map<int, String> _speakerIdToLabel = {};
+
+  /// 根据原始speakerId获取显示标签
+  /// 首次遇到新speakerId时自动分配标签
+  String getSpeakerLabel(int? speakerId) {
+    if (speakerId == null || speakerId == 0) {
+      // 对于未知说话人，也分配标签
+      final effectiveId = speakerId ?? 0;
+      if (!_speakerIdToLabel.containsKey(effectiveId)) {
+        _speakerIdToLabel[effectiveId] = String.fromCharCode(65 + _nextLabelIndex);
+        _nextLabelIndex++;
+      }
+      return _speakerIdToLabel[effectiveId]!;
+    }
+    if (!_speakerIdToLabel.containsKey(speakerId)) {
+      _speakerIdToLabel[speakerId] = String.fromCharCode(65 + _nextLabelIndex);
+      _nextLabelIndex++;
+    }
+    return _speakerIdToLabel[speakerId]!;
+  }
+
   // ========== 已确认的对话列表（definite:true时添加，不重复）==========
   final confirmedDialogs = <_ConfirmedDialog>[].obs;
 
@@ -1507,6 +1530,7 @@ class AIDialogCtrl extends GetxController {
     _shownHints.clear();
     _speakerLabelMap.clear();
     _speakerInfos.clear();
+    _speakerIdToLabel.clear();
     _nextLabelIndex = 0;
     emotionEvents.clear();
     displayEvents.clear();
@@ -2481,13 +2505,8 @@ class _AIDialogContentState extends State<_AIDialogContent> {
                 if (index < displayEvents.length) {
                   final e = displayEvents[index];
                   if (e.type == 'dialog') {
-                    // 对话事件：显示说话人标签和文本（黑色正常字体）
-                    String label;
-                    if (e.speakerId == null || e.speakerId == 0) {
-                      label = 'X';
-                    } else {
-                      label = String.fromCharCode(64 + e.speakerId!);
-                    }
+                    // 对话事件：显示说话人标签和文本（深灰色）
+                    final label = ctrl.getSpeakerLabel(e.speakerId);
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Text(
@@ -2520,12 +2539,7 @@ class _AIDialogContentState extends State<_AIDialogContent> {
                 // 后半部分是当前实时文本
                 final activeIndex = index - displayEvents.length;
                 final entry = activeDialogs.entries.elementAt(activeIndex);
-                String label;
-                if (entry.key == 0) {
-                  label = 'X';
-                } else {
-                  label = String.fromCharCode(64 + entry.key);
-                }
+                final label = ctrl.getSpeakerLabel(entry.key);
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Text(
