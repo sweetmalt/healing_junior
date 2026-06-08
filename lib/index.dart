@@ -1053,27 +1053,12 @@ class AIDialogCtrl extends GetxController {
   // ========== 每个speaker的累积文本（用于分析和整理）==========
   final Map<int, String> _speakerTexts = {};
 
-  // ========== 说话人ID动态映射（解决ASR返回speakerId=0时的显示问题）==========
-  // 原始speakerId -> 显示标签（A/B/C...）
-  final Map<int, String> _speakerIdToLabel = {};
+  // ========== 说话人标签 ==========
+  // 直接使用 speakerId 数字作为标签：0说、1说、2说...
 
-  /// 根据原始speakerId获取显示标签
-  /// 首次遇到新speakerId时自动分配标签
+  /// 根据 speakerId 获取显示标签
   String getSpeakerLabel(int? speakerId) {
-    if (speakerId == null || speakerId == 0) {
-      // 对于未知说话人，也分配标签
-      final effectiveId = speakerId ?? 0;
-      if (!_speakerIdToLabel.containsKey(effectiveId)) {
-        _speakerIdToLabel[effectiveId] = String.fromCharCode(65 + _nextLabelIndex);
-        _nextLabelIndex++;
-      }
-      return _speakerIdToLabel[effectiveId]!;
-    }
-    if (!_speakerIdToLabel.containsKey(speakerId)) {
-      _speakerIdToLabel[speakerId] = String.fromCharCode(65 + _nextLabelIndex);
-      _nextLabelIndex++;
-    }
-    return _speakerIdToLabel[speakerId]!;
+    return speakerId?.toString() ?? '0';
   }
 
   // ========== 已确认的对话列表（definite:true时添加，不重复）==========
@@ -1143,11 +1128,6 @@ class AIDialogCtrl extends GetxController {
     _readReports.add(fileName);
     _saveReadReports(); // 持久化保存
   }
-
-  // ========== 说话人分析 ==========
-  final Map<int, SpeakerRoleInfo> _speakerInfos = {};
-  final Map<int, int> _speakerLabelMap = {};
-  int _nextLabelIndex = 0;
 
   // ========== 定时器 ==========
   Timer? _reanalysisTimer;
@@ -1356,7 +1336,7 @@ class AIDialogCtrl extends GetxController {
       if (uttText.isNotEmpty) {
         activeDialogs[speakerId] = uttText;
         _speakerTexts[speakerId] = uttText;
-        _getOrAssignLabel(speakerId);
+        // speakerId 会通过 getSpeakerLabel() 转换为标签
       }
     }
 
@@ -1397,15 +1377,8 @@ class AIDialogCtrl extends GetxController {
     }
 
     // 保持 currentFullText（用于检测长度等其他用途）
-    // speaker_id=0 → 某人, 1 → A, 2 → B, 3 → C...
     final markedText = result.speakerTexts.map((e) {
-      String label;
-      if (e.key == 0) {
-        label = '某';
-      } else {
-        label = String.fromCharCode(65 + e.key - 1); // 1→A, 2→B, 3→C...
-      }
-      return '【$label说】${e.value}';
+      return '${getSpeakerLabel(e.key)}说：${e.value}';
     }).join('\n');
     currentFullText.value = markedText;
 
@@ -1512,18 +1485,7 @@ class AIDialogCtrl extends GetxController {
     return lines.join('\n');
   }
 
-  String _getOrAssignLabel(int speakerId) {
-    const labels = ['A', 'B', 'C', 'D', 'E', 'F'];
-    if (!_speakerLabelMap.containsKey(speakerId)) {
-      _speakerLabelMap[speakerId] = _nextLabelIndex;
-      _speakerInfos[speakerId] = SpeakerRoleInfo(
-        speakerId: speakerId,
-        label: labels[_nextLabelIndex % labels.length],
-      );
-      _nextLabelIndex++;
-    }
-    return _speakerInfos[speakerId]!.label;
-  }
+
 
   Future<void> startRecording() async {
     if (isRecording.value) return;
@@ -1556,7 +1518,7 @@ class AIDialogCtrl extends GetxController {
           customerCtrl.isRecording.value = true;
           Get.back();
         },
-        onCancel: () => Get.back(),
+        onCancel: () =>{},
       );
     }
     // 重置所有状态
@@ -1586,10 +1548,7 @@ class AIDialogCtrl extends GetxController {
     processedDialogs.clear();
     hints.clear();
     _shownHints.clear();
-    _speakerLabelMap.clear();
-    _speakerInfos.clear();
-    _speakerIdToLabel.clear();
-    _nextLabelIndex = 0;
+    // 说话人标签已简化为 speakerId 直接作为标签，无需清理
     emotionEvents.clear();
     displayEvents.clear();
     confirmedDialogs.clear();
@@ -2093,64 +2052,34 @@ class AIDialogCtrl extends GetxController {
   /// 重新分析并生成对话视图
   /// 基于每个speaker的累积文本，按标点分割成句子后分析
   void _reAnalyze() {
-    // 重置每个speaker的问题/回答计数
-    for (final info in _speakerInfos.values) {
-      info.questionCount = 0;
-      info.answerCount = 0;
-    }
-
-    // 1. 按标点分割每个speaker的文本，统计提问/回答
+    // 1. 按标点分割每个speaker的文本
     final Map<int, List<String>> speakerSentences = {};
     for (final entry in _speakerTexts.entries) {
       final spkid = entry.key;
       final fullText = entry.value;
       final sentences = _splitIntoSentences(fullText);
       speakerSentences[spkid] = sentences;
-
-      final info = _speakerInfos[spkid];
-      if (info == null) continue;
-
-      for (final sentence in sentences) {
-        if (_isQuestion(sentence)) {
-          info.questionCount++;
-        } else {
-          info.answerCount++;
-        }
-      }
     }
 
-    // 2. 推断说话人角色
-    _inferRoles();
-
-    // 3. 生成处理后的对话列表（收集所有句子）
+    // 2. 生成处理后的对话列表（收集所有句子）
     final newDialogs = <ProcessedDialogEntry>[];
 
     for (final entry in speakerSentences.entries) {
       final spkid = entry.key;
       final sentences = entry.value;
-      final info = _speakerInfos[spkid];
-      if (info == null) continue;
+      final label = getSpeakerLabel(spkid);
 
       for (final sentence in sentences) {
         if (sentence.trim().isEmpty) continue;
 
-        if (info.inferredRole != SpeakerRole.unknown) {
-          newDialogs.add(ProcessedDialogEntry(
-            speakerLabel: info.label,
-            role: info.inferredRole,
-            text: sentence.trim(),
-          ));
-        } else {
-          newDialogs.add(ProcessedDialogEntry(
-            speakerLabel: info.label,
-            role: null,
-            text: sentence.trim(),
-          ));
-        }
+        newDialogs.add(ProcessedDialogEntry(
+          speakerLabel: label,
+          text: sentence.trim(),
+        ));
       }
     }
 
-    // 4. 添加提示问题
+    // 3. 添加提示问题
     for (final hint in hints) {
       newDialogs.add(ProcessedDialogEntry(
         speakerLabel: '💡',
@@ -2159,7 +2088,7 @@ class AIDialogCtrl extends GetxController {
       ));
     }
 
-    // 5. 更新UI
+    // 4. 更新UI
     processedDialogs.assignAll(newDialogs);
   }
 
@@ -2172,40 +2101,6 @@ class AIDialogCtrl extends GetxController {
     final parts = text.split(pattern);
 
     return parts.map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
-  }
-
-  bool _isQuestion(String text) {
-    final trimmed = text.trim();
-    if (trimmed.endsWith('?') || trimmed.endsWith('？')) return true;
-    const questionWords = ['什么', '怎么', '为什么', '如何', '是不是', '能不能', '会不会', '有没有', '可以', '吗', '呢', '吧'];
-    for (final word in questionWords) {
-      if (trimmed.contains(word)) return true;
-    }
-    return false;
-  }
-
-  void _inferRoles() {
-    final speakers = _speakerInfos.values.toList();
-
-    if (speakers.isEmpty) return;
-
-    if (speakers.length == 1) {
-      // 只有一个人：保持unknown（待确认）
-      speakers[0].inferredRole = SpeakerRole.unknown;
-      return;
-    }
-
-    // 有多个人：根据发言模式判断
-    for (final info in speakers) {
-      final ratio = info.questionRatio;
-      if (ratio > 0.4) {
-        // 提问比例较高 → 疗愈师
-        info.inferredRole = SpeakerRole.therapist;
-      } else {
-        // 提问比例较低 → 顾客
-        info.inferredRole = SpeakerRole.client;
-      }
-    }
   }
 
   Future<void> _generateHint() async {
@@ -2251,8 +2146,7 @@ class AIDialogCtrl extends GetxController {
 
     buffer.writeln('## 完整记录\n');
     for (final entry in _speakerTexts.entries) {
-      final info = _speakerInfos[entry.key];
-      final label = info?.label ?? '未知';
+      final label = getSpeakerLabel(entry.key);
       buffer.writeln('【$label说】${entry.value}');
     }
 
@@ -2262,8 +2156,7 @@ class AIDialogCtrl extends GetxController {
         if (e.isHint) {
           buffer.writeln('💡 提示：${e.text}');
         } else {
-          final roleName = e.role == SpeakerRole.therapist ? '疗愈师' : (e.role == SpeakerRole.client ? '顾客' : '待确认');
-          buffer.writeln('[$roleName ${e.speakerLabel}] ${e.text}');
+          buffer.writeln('【${e.speakerLabel}说】${e.text}');
         }
       }
     }
@@ -2503,10 +2396,10 @@ class _AIDialogContentState extends State<_AIDialogContent> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // 对话标签
-          _buildBrowserTab('对话', 0),
-          // 提问标签
-          _buildBrowserTab('提问', 1),
+          // 交互标签
+          _buildBrowserTab('交互', 0),
+          // 动态标签
+          _buildBrowserTab('动态', 1),
         ],
       ),
     );

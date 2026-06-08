@@ -1348,7 +1348,7 @@ class _DrawnCardsBar extends StatelessWidget {
       final isEmpty = controller.drawnCardSets.isEmpty;
 
       if (isEmpty) {
-        return Container(
+        return SizedBox(
           height: 80,
           child: const Center(
             child: Text(
@@ -1359,7 +1359,7 @@ class _DrawnCardsBar extends StatelessWidget {
         );
       }
 
-      return Container(
+      return SizedBox(
         height: 80,
         child: ListView.builder(
           scrollDirection: Axis.horizontal,
