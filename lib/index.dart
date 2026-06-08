@@ -2481,30 +2481,36 @@ class _AIDialogContentState extends State<_AIDialogContent> {
                 if (index < displayEvents.length) {
                   final e = displayEvents[index];
                   if (e.type == 'dialog') {
-                    // 对话事件：显示说话人标签和文本
+                    // 对话事件：显示说话人标签和文本（黑色正常字体）
                     String label;
                     if (e.speakerId == null || e.speakerId == 0) {
-                      label = '某';
+                      label = 'X';
                     } else {
-                      label = String.fromCharCode(65 + e.speakerId! - 1);
+                      label = String.fromCharCode(64 + e.speakerId!);
                     }
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Text(
-                        '【$label说】：${e.text}',
-                        style: const TextStyle(fontSize: 14, height: 1.6),
+                        '$label说：${e.text}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          height: 1.6,
+                          color: Colors.grey[700],
+                          decoration: TextDecoration.none,
+                        ),
                       ),
                     );
                   } else {
-                    // 情绪事件：显示情绪图标和文本（橙色字体）
+                    // 情绪事件：只显示文本（橙色字体，无图标）
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Text(
-                        '💭 ${e.text}',
+                        e.text,
                         style: TextStyle(
                           fontSize: 13,
                           height: 1.4,
                           color: Colors.orange[700],
+                          decoration: TextDecoration.none,
                         ),
                       ),
                     );
@@ -2516,18 +2522,19 @@ class _AIDialogContentState extends State<_AIDialogContent> {
                 final entry = activeDialogs.entries.elementAt(activeIndex);
                 String label;
                 if (entry.key == 0) {
-                  label = '某';
+                  label = 'X';
                 } else {
-                  label = String.fromCharCode(65 + entry.key - 1);
+                  label = String.fromCharCode(64 + entry.key);
                 }
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Text(
-                    '【$label说】：${entry.value}',
-                    style: TextStyle(
+                    '$label说：${entry.value}',
+                    style: const TextStyle(
                       fontSize: 14,
                       height: 1.6,
-                      color: Colors.grey[600], // 当前实时文本用深灰色
+                      color: Colors.black87,
+                      decoration: TextDecoration.none,
                     ),
                   ),
                 );
