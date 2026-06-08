@@ -622,21 +622,46 @@ class _EmotionEvent {
   _EmotionEvent({required this.timestamp, required this.emotion});
 }
 
-/// 混合事件（用于生成混合文本）
-/// 混合事件（用于实时混合显示和报告生成）
-class _MixedEvent {
-  final DateTime timestamp; // 事件时间戳
-  final String type; // 'dialog' or 'emotion'
+/// 已确认的对话事件
+class _ConfirmedDialog {
+  final DateTime timestamp;
+  final int speakerId;
+  final String text;
+
+  _ConfirmedDialog({
+    required this.timestamp,
+    required this.speakerId,
+    required this.text,
+  });
+}
+
+/// 显示用混合事件（对话 + 情绪）
+class _DisplayEvent {
+  final DateTime timestamp;
+  final String type; // 'dialog' or 'emotion' or 'active'
   final int? speakerId; // 仅 dialog 类型使用
-  final String text; // 对话文本或情绪文本
-  final bool isConfirmed; // 是否已确认（definite:true）
+  final String text;
+
+  _DisplayEvent({
+    required this.timestamp,
+    required this.type,
+    this.speakerId,
+    required this.text,
+  });
+}
+
+/// 混合事件（用于报告生成和提示问题）
+class _MixedEvent {
+  final DateTime timestamp;
+  final String type; // 'dialog' or 'emotion'
+  final int? speakerId;
+  final String text;
 
   _MixedEvent({
     required this.timestamp,
     required this.type,
     this.speakerId,
     required this.text,
-    this.isConfirmed = false,
   });
 }
 
@@ -1017,21 +1042,31 @@ class AIDialogCtrl extends GetxController {
   final elapsedSeconds = 0.obs; // 录音持续秒数
   Timer? _elapsedTimer;
 
-  // ========== 左侧：当前完整全文（覆盖显示，不是追加条目）==========
+  // ========== 左侧：当前完整全文（用于检测长度等其他用途）==========
   final currentFullText = ''.obs;
   String _lastDisplayText = ''; // 上次显示的全文，用于去重
 
   // ========== 每个speaker的累积文本（用于分析和整理）==========
   final Map<int, String> _speakerTexts = {};
 
-  // ========== 情绪事件（用于混合显示）==========
-  final List<_EmotionEvent> _emotionEvents = [];
+  // ========== 已确认的对话列表（definite:true时添加，不重复）==========
+  final confirmedDialogs = <_ConfirmedDialog>[].obs;
 
-  // ========== 混合事件列表（用于实时混合显示、提示问题、报告生成）==========
-  final mixedEvents = <_MixedEvent>[].obs;
+  // ========== 当前说话人的实时文本（可能变化，会被后续内容覆盖）==========
+  final activeDialogs = <int, String>{}.obs;
+
+  // ========== 情绪事件列表（用于混合显示）==========
+  final emotionEvents = <_EmotionEvent>[].obs;
+
+  // ========== 显示用混合事件（已确认对话 + 情绪，按时间排序）==========
+  // 这个列表用于左侧面板实时显示
+  final displayEvents = <_DisplayEvent>[].obs;
+
+  // ========== 上次确认时的文本快照（用于计算增量）==========
+  final Map<int, String> _lastConfirmedTexts = {};
 
   /// 注入情绪事件（供脑电波监测模块调用）
-  /// 注意：此方法只存储情绪事件，不影响语音识别的实时显示
+  /// 情绪事件会被添加到 displayEvents 中，实现与对话的实时混合显示
   void injectEmotion(String emotion) {
     if (!_isSessionActive) return;
 
@@ -1039,14 +1074,24 @@ class AIDialogCtrl extends GetxController {
       timestamp: DateTime.now(),
       emotion: emotion,
     );
-    _emotionEvents.add(emotionEvent);
+    emotionEvents.add(emotionEvent);
 
-    // 同时添加到混合事件列表（用于实时混合显示）
-    mixedEvents.add(_MixedEvent(
+    // 添加到显示事件列表（用于实时混合显示）
+    displayEvents.add(_DisplayEvent(
       timestamp: emotionEvent.timestamp,
       type: 'emotion',
       text: emotion,
     ));
+
+    // 重新排序显示事件
+    _sortDisplayEvents();
+  }
+
+  /// 重新排序显示事件（按时间线）
+  void _sortDisplayEvents() {
+    displayEvents.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    // RxList.sort 不触发 UI 更新，需要手动调用 refresh
+    displayEvents.refresh();
   }
 
   // ========== 右侧：对话区域 ==========
@@ -1277,81 +1322,54 @@ class AIDialogCtrl extends GetxController {
     }
     _lastDisplayText = text;
 
-    // 更新每个speaker的累积文本
+    // 更新每个speaker的实时文本（用于显示面板的实时部分）
     for (final entry in result.speakerTexts) {
       final speakerId = entry.key;
       final uttText = entry.value;
       if (uttText.isNotEmpty) {
+        activeDialogs[speakerId] = uttText;
         _speakerTexts[speakerId] = uttText;
         _getOrAssignLabel(speakerId);
-
-        // 处理每个 utterance，添加到混合事件列表
-        // 检查该 speaker 是否已有未确认的对话事件
-        final existingUnconfirmed = mixedEvents.any(
-          (e) => e.type == 'dialog' && e.speakerId == speakerId && !e.isConfirmed,
-        );
-
-        if (!existingUnconfirmed) {
-          // 如果没有未确认的事件，添加一个新事件
-          mixedEvents.add(_MixedEvent(
-            timestamp: DateTime.now(),
-            type: 'dialog',
-            speakerId: speakerId,
-            text: uttText,
-            isConfirmed: false,
-          ));
-        } else {
-          // 如果有待确认的事件，更新最后一个未确认事件的文本
-          // 找到该 speaker 最后一个未确认事件
-          final lastUnconfirmedIndex = mixedEvents.lastIndexWhere(
-            (e) => e.type == 'dialog' && e.speakerId == speakerId && !e.isConfirmed,
-          );
-          if (lastUnconfirmedIndex != -1) {
-            // 用新事件替换旧的未确认事件（因为 _MixedEvent 是 final 的）
-            mixedEvents.removeAt(lastUnconfirmedIndex);
-            mixedEvents.add(_MixedEvent(
-              timestamp: DateTime.now(),
-              type: 'dialog',
-              speakerId: speakerId,
-              text: uttText,
-              isConfirmed: false,
-            ));
-          }
-        }
       }
     }
 
-    // 处理已确定的 utterance（definite:true），标记为已确认
+    // 处理已确定的 utterance（definite:true）
+    // 这是完整句子，需要：1) 加入 confirmedDialogs 2) 加入 displayEvents 3) 清空 activeDialogs 中对应的文本
     if (result.definiteUtterances.isNotEmpty) {
       for (final defUtt in result.definiteUtterances) {
-        // 找到对应的未确认事件，替换为已确认状态
-        final unconfirmedIndex = mixedEvents.lastIndexWhere(
-          (e) => e.type == 'dialog' && e.speakerId == defUtt.speakerId && !e.isConfirmed,
+        // 去重：检查是否已存在相同的已确认对话
+        final exists = confirmedDialogs.any(
+          (e) => e.speakerId == defUtt.speakerId && e.text == defUtt.text,
         );
-        if (unconfirmedIndex != -1) {
-          // 用已确认的事件替换
-          mixedEvents.removeAt(unconfirmedIndex);
-          mixedEvents.add(_MixedEvent(
-            timestamp: DateTime.now(),
-            type: 'dialog',
-            speakerId: defUtt.speakerId,
-            text: defUtt.text,
-            isConfirmed: true,
-          ));
-        } else {
-          // 如果没有对应的未确认事件，直接添加
-          mixedEvents.add(_MixedEvent(
-            timestamp: DateTime.now(),
-            type: 'dialog',
-            speakerId: defUtt.speakerId,
-            text: defUtt.text,
-            isConfirmed: true,
-          ));
-        }
+        if (exists) continue;
+
+        // 添加到已确认列表
+        confirmedDialogs.add(_ConfirmedDialog(
+          timestamp: DateTime.now(),
+          speakerId: defUtt.speakerId,
+          text: defUtt.text,
+        ));
+
+        // 添加到显示事件列表
+        displayEvents.add(_DisplayEvent(
+          timestamp: DateTime.now(),
+          type: 'dialog',
+          speakerId: defUtt.speakerId,
+          text: defUtt.text,
+        ));
+
+        // 清空该speaker的实时文本（因为已经确认了）
+        activeDialogs.remove(defUtt.speakerId);
+
+        // 更新快照
+        _lastConfirmedTexts[defUtt.speakerId] = defUtt.text;
       }
+
+      // 重新排序显示事件
+      _sortDisplayEvents();
     }
 
-    // 保持原有显示方式：拼接带说话人标记的完整文本
+    // 保持 currentFullText（用于检测长度等其他用途）
     // speaker_id=0 → 某人, 1 → A, 2 → B, 3 → C...
     final markedText = result.speakerTexts.map((e) {
       String label;
@@ -1369,16 +1387,35 @@ class AIDialogCtrl extends GetxController {
   }
 
   /// 生成混合文本（对话 + 情绪，用于报告和提示问题）
-  /// 只包含已确认的对话事件 + 所有情绪事件
+  /// 只包含已确认的对话事件 + 所有情绪事件，按时间排序
   String _generateMixedText() {
-    if (mixedEvents.isEmpty) return '';
-
     final lines = <String>[];
-    for (final e in mixedEvents) {
-      if (e.type == 'dialog') {
-        // 只包含已确认的对话
-        if (!e.isConfirmed) continue;
 
+    // 合并对话和情绪事件
+    final allEvents = <_MixedEvent>[];
+    for (final d in confirmedDialogs) {
+      allEvents.add(_MixedEvent(
+        timestamp: d.timestamp,
+        type: 'dialog',
+        speakerId: d.speakerId,
+        text: d.text,
+      ));
+    }
+    for (final e in emotionEvents) {
+      allEvents.add(_MixedEvent(
+        timestamp: e.timestamp,
+        type: 'emotion',
+        text: e.emotion,
+      ));
+    }
+
+    if (allEvents.isEmpty) return '';
+
+    // 按时间排序
+    allEvents.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+    for (final e in allEvents) {
+      if (e.type == 'dialog') {
         String label;
         if (e.speakerId == null || e.speakerId == 0) {
           label = '某';
@@ -1387,7 +1424,6 @@ class AIDialogCtrl extends GetxController {
         }
         lines.add('【$label说】：${e.text}');
       } else {
-        // 情绪事件全部包含
         lines.add('💭 ${e.text}');
       }
     }
@@ -1472,8 +1508,11 @@ class AIDialogCtrl extends GetxController {
     _speakerLabelMap.clear();
     _speakerInfos.clear();
     _nextLabelIndex = 0;
-    _emotionEvents.clear();
-    mixedEvents.clear();
+    emotionEvents.clear();
+    displayEvents.clear();
+    confirmedDialogs.clear();
+    activeDialogs.clear();
+    _lastConfirmedTexts.clear();
     errorMessage.value = '';
     cardohReportMarkdown.value = '';
     reconnectInfo.value = null;
@@ -2073,7 +2112,7 @@ class AIDialogCtrl extends GetxController {
   }
 
   Future<void> _generateHint() async {
-    if (_speakerTexts.isEmpty && _emotionEvents.isEmpty) return;
+    if (_speakerTexts.isEmpty && emotionEvents.isEmpty) return;
 
     // 构建对话上下文（使用混合文本：对话 + 情绪）
     final conversation = _generateMixedText();
@@ -2397,15 +2436,16 @@ class _AIDialogContentState extends State<_AIDialogContent> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 内容：渲染混合事件列表（对话+情绪）
+        // 内容：渲染显示事件列表（已确认对话+情绪+当前实时文本）
         Expanded(
           child: Obx(() {
             // 在Obx内部获取controller，才能正确监听observable变化
             final aiCtrl = Get.find<AIDialogCtrl>();
-            final events = aiCtrl.mixedEvents;
+            final displayEvents = aiCtrl.displayEvents;
+            final activeDialogs = aiCtrl.activeDialogs;
 
             // 检测事件列表变化，自动滚动到底部
-            if (events.isNotEmpty) {
+            if (displayEvents.isNotEmpty || activeDialogs.isNotEmpty) {
               // 延迟滚动，等待UI更新完成
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (_leftScrollController.hasClients) {
@@ -2418,7 +2458,8 @@ class _AIDialogContentState extends State<_AIDialogContent> {
               });
             }
 
-            if (events.isEmpty) {
+            // 如果没有显示内容，显示空状态提示
+            if (displayEvents.isEmpty && activeDialogs.isEmpty) {
               return Center(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -2434,43 +2475,62 @@ class _AIDialogContentState extends State<_AIDialogContent> {
             return ListView.builder(
               controller: _leftScrollController,
               padding: const EdgeInsets.all(12),
-              itemCount: events.length,
+              itemCount: displayEvents.length + activeDialogs.length,
               itemBuilder: (context, index) {
-                final e = events[index];
-                if (e.type == 'dialog') {
-                  // 对话事件：显示说话人标签和文本
-                  String label;
-                  if (e.speakerId == null || e.speakerId == 0) {
-                    label = '某';
+                // 前半部分是已确认的显示事件
+                if (index < displayEvents.length) {
+                  final e = displayEvents[index];
+                  if (e.type == 'dialog') {
+                    // 对话事件：显示说话人标签和文本
+                    String label;
+                    if (e.speakerId == null || e.speakerId == 0) {
+                      label = '某';
+                    } else {
+                      label = String.fromCharCode(65 + e.speakerId! - 1);
+                    }
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        '【$label说】：${e.text}',
+                        style: const TextStyle(fontSize: 14, height: 1.6),
+                      ),
+                    );
                   } else {
-                    label = String.fromCharCode(65 + e.speakerId! - 1);
+                    // 情绪事件：显示情绪图标和文本（橙色字体）
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        '💭 ${e.text}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          height: 1.4,
+                          color: Colors.orange[700],
+                        ),
+                      ),
+                    );
                   }
-                  // 已确认的用正常黑色，未确认的用深灰色
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Text(
-                      '【$label说】：${e.text}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        height: 1.6,
-                        color: e.isConfirmed ? Colors.black87 : Colors.grey[600],
-                      ),
-                    ),
-                  );
-                } else {
-                  // 情绪事件：显示情绪图标和文本（橙色字体）
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Text(
-                      '💭 ${e.text}',
-                      style: TextStyle(
-                        fontSize: 13,
-                        height: 1.4,
-                        color: Colors.orange[700],
-                      ),
-                    ),
-                  );
                 }
+                
+                // 后半部分是当前实时文本
+                final activeIndex = index - displayEvents.length;
+                final entry = activeDialogs.entries.elementAt(activeIndex);
+                String label;
+                if (entry.key == 0) {
+                  label = '某';
+                } else {
+                  label = String.fromCharCode(65 + entry.key - 1);
+                }
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    '【$label说】：${entry.value}',
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.6,
+                      color: Colors.grey[600], // 当前实时文本用深灰色
+                    ),
+                  ),
+                );
               },
             );
           }),
@@ -2890,6 +2950,10 @@ class _ReportViewerSheet extends StatelessWidget {
                     h2: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     h3: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     h4: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                    a: TextStyle(
+                      color: Colors.blue,
+                      decoration: TextDecoration.none, // 移除链接下划线
+                    ),
                   ),
                 );
               },
