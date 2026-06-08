@@ -831,10 +831,10 @@ class CozeHintService {
         return '';
       }
       //余额不足
-    if (employeeCtrl.paymentBalance.value < 5) {
-      Get.snackbar("请先充值", "您的账号余额不足，无法使用AI功能");
-      return "";
-    }
+      if (employeeCtrl.paymentBalance.value < 5) {
+        Get.snackbar("请先充值", "您的账号余额不足，无法使用AI功能");
+        return "";
+      }
       final token = await employeeCtrl.pay(0.1);
       return token;
     } catch (e) {
@@ -980,10 +980,10 @@ $dialogContent''';
         return '';
       }
       //余额不足
-    if (employeeCtrl.paymentBalance.value < 1) {
-      Get.snackbar("请先充值", "您的账号余额不足，无法使用AI功能");
-      return "";
-    }
+      if (employeeCtrl.paymentBalance.value < 1) {
+        Get.snackbar("请先充值", "您的账号余额不足，无法使用AI功能");
+        return "";
+      }
       final token = await employeeCtrl.pay(1);
       return token;
     } catch (e) {
@@ -1485,8 +1485,6 @@ class AIDialogCtrl extends GetxController {
     return lines.join('\n');
   }
 
-
-
   Future<void> startRecording() async {
     if (isRecording.value) return;
 
@@ -1518,7 +1516,7 @@ class AIDialogCtrl extends GetxController {
           customerCtrl.isRecording.value = true;
           Get.back();
         },
-        onCancel: () =>{},
+        onCancel: () => {},
       );
     }
     // 重置所有状态
@@ -1621,7 +1619,7 @@ class AIDialogCtrl extends GetxController {
           myCtrl.gameover();
           Get.back();
         },
-        onCancel: () => Get.back(),
+        onCancel: () => {},
       );
     }
   }
@@ -2510,7 +2508,7 @@ class _AIDialogContentState extends State<_AIDialogContent> {
                     );
                   }
                 }
-                
+
                 // 后半部分是当前实时文本
                 final activeIndex = index - displayEvents.length;
                 final entry = activeDialogs.entries.elementAt(activeIndex);
