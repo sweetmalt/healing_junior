@@ -1454,6 +1454,63 @@ class AIDialogCtrl extends GetxController {
     return lines.join('\n');
   }
 
+  /// 生成完整文本（包含所有内容：已确认对话 + 实时文本 + 情绪）
+  /// 用于报告生成 - 包含所有识别内容，包括未最终确认的
+  String _generateAllText() {
+    final lines = <String>[];
+    final now = DateTime.now();
+
+    // 合并所有事件：已确认对话、实时对话、情绪
+    final allEvents = <_MixedEvent>[];
+
+    // 添加已确认对话（带时间戳）
+    for (final d in confirmedDialogs) {
+      allEvents.add(_MixedEvent(
+        timestamp: d.timestamp,
+        type: 'dialog',
+        speakerId: d.speakerId,
+        text: d.text,
+      ));
+    }
+
+    // 添加实时未确认对话（使用当前时间作为估算）
+    int idx = 0;
+    for (final entry in activeDialogs.entries) {
+      allEvents.add(_MixedEvent(
+        timestamp: now.add(Duration(milliseconds: idx * 100)),
+        type: 'active',
+        speakerId: entry.key,
+        text: entry.value,
+      ));
+      idx++;
+    }
+
+    // 添加情绪事件
+    for (final e in emotionEvents) {
+      allEvents.add(_MixedEvent(
+        timestamp: e.timestamp,
+        type: 'emotion',
+        text: e.emotion,
+      ));
+    }
+
+    if (allEvents.isEmpty) return '';
+
+    // 按时间排序
+    allEvents.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+    for (final e in allEvents) {
+      if (e.type == 'dialog' || e.type == 'active') {
+        final label = getSpeakerLabel(e.speakerId);
+        lines.add('$label说：${e.text}');
+      } else if (e.type == 'emotion') {
+        lines.add(e.text);
+      }
+    }
+
+    return lines.join('\n');
+  }
+
   String _getOrAssignLabel(int speakerId) {
     const labels = ['A', 'B', 'C', 'D', 'E', 'F'];
     if (!_speakerLabelMap.containsKey(speakerId)) {
@@ -1589,8 +1646,10 @@ class AIDialogCtrl extends GetxController {
     // 停止前做一次最终分析
     _reAnalyze();
 
-    // 判断是否显示"生成报告"按钮（文本超过100字）
-    _showReportButton.value = currentFullText.value.length > 100;
+    // 判断是否显示"生成报告"按钮
+    // 条件：全部内容>=500字 且 包含已确认对话
+    final allText = _generateAllText();
+    _showReportButton.value = allText.length >= 500 && confirmedDialogs.isNotEmpty;
     //
     final customerCtrl = Get.find<CustomerCtrl>();
     if (customerCtrl.isRecording.value) {
@@ -1704,11 +1763,24 @@ class AIDialogCtrl extends GetxController {
         clientName = customerCtrl.nickname.value.isNotEmpty ? customerCtrl.nickname.value : '来访者';
       } catch (_) {}
 
-      // 构建对话内容（使用混合文本：对话 + 情绪）
-      final dialogContent = _generateMixedText();
+      // 构建对话内容（使用完整文本：已确认对话 + 实时文本 + 情绪）
+      // 必须包含已确认对话内容
+      if (confirmedDialogs.isEmpty) {
+        isGeneratingReport.value = false;
+        Get.snackbar('提示', '请先完成录音对话', snackPosition: SnackPosition.BOTTOM);
+        return false;
+      }
+      final dialogContent = _generateAllText();
 
       // 限制字数：超过5000字时只取最新5000字（越到最后的内容越有价值）
       final limitedContent = dialogContent.length > 5000 ? dialogContent.substring(dialogContent.length - 5000) : dialogContent;
+
+      // ignore: avoid_print
+      print('[AIDialog] generateReport 调用报告生成API');
+      // ignore: avoid_print
+      print('[AIDialog] 报告API参数长度: ${limitedContent.length}');
+      // ignore: avoid_print
+      print('[AIDialog] 报告API参数内容:\n$limitedContent');
 
       // 显示"正在生成"的提示（不自动消失）
       Get.snackbar(
@@ -2136,13 +2208,22 @@ class AIDialogCtrl extends GetxController {
   }
 
   Future<void> _generateHint() async {
-    if (_speakerTexts.isEmpty && emotionEvents.isEmpty) return;
+    // 提示问题只用已确认对话，不包含实时未确认内容
+    // 如果没有已确认对话，不调用API
+    if (confirmedDialogs.isEmpty) return;
 
-    // 构建对话上下文（使用混合文本：对话 + 情绪）
+    // 构建对话上下文（已确认对话 + 情绪）
     final conversation = _generateMixedText();
 
     // 文本字数限制：超过500字时只取最新500字
     final truncated = conversation.length > 500 ? conversation.substring(conversation.length - 500) : conversation;
+
+    // ignore: avoid_print
+    print('[AIDialog] _generateHint 调用提示问题API');
+    // ignore: avoid_print
+    print('[AIDialog] 提示问题API参数长度: ${truncated.length}');
+    // ignore: avoid_print
+    print('[AIDialog] 提示问题API参数内容:\n$truncated');
 
     // 调用Coze生成提示问题（Bot内部已做去重）
     final question = await CozeHintService.generateHint(
