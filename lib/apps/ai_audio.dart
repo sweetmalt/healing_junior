@@ -89,15 +89,16 @@ class AiAudioCtrl extends GetxController {
       return;
     }
     //余额不足
-    if (employeeCtrl.paymentBalance.value < 1) {
+    if (employeeCtrl.paymentBalance.value < 2) {
       Get.snackbar("请先充值", "您的账号余额不足，无法使用AI功能");
       return;
     }
-    if (employeeCtrl.paymentTemp.value < 2) {
-      bearer.value = await employeeCtrl.pay(2);
-    }
+    // if (employeeCtrl.paymentTemp.value < 2) {
+    //   bearer.value = await employeeCtrl.pay(2);
+    // }
+    bearer.value = await employeeCtrl.pay(2);
     if (bearer.value.isEmpty) {
-      Get.snackbar("异常提示", "网络故障，请稍后重试");
+      Get.snackbar("异常提示", "获取coze_token失败，请稍后重试");
       return;
     }
     prompt.value =
@@ -109,7 +110,7 @@ class AiAudioCtrl extends GetxController {
     try {
       audioUrl.value = await Data.generateAiImage(cozeBot, prompt.value, bearer.value);
       if (audioUrl.value.length > 20) {
-        employeeCtrl.paymentTemp.value -= 2;
+        //employeeCtrl.paymentTemp.value -= 2;
         isLoading.value = false;
       }
     } finally {

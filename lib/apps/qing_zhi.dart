@@ -286,11 +286,12 @@ class QingZhiCtrl extends GetxController {
       Get.snackbar("请先充值", "您的账号余额不足，无法使用AI功能");
       return;
     }
-    if (employeeCtrl.paymentTemp.value < 1) {
-      bearer.value = await employeeCtrl.pay(1);
-    }
+    // if (employeeCtrl.paymentTemp.value < 1) {
+    //   bearer.value = await employeeCtrl.pay(1);
+    // }
+    bearer.value = await employeeCtrl.pay(1);
     if (bearer.value.isEmpty) {
-      Get.snackbar("故障", "网络故障，请稍后重试");
+      Get.snackbar("故障", "获取coze_token失败，请稍后重试");
       return;
     }
     try {
@@ -298,7 +299,7 @@ class QingZhiCtrl extends GetxController {
       debugPrint(analysisPrompt.value);
       analysisText.value = await Data.generateAiText(cozeBot, analysisPrompt.value, bearer.value);
       if (analysisText.value.isNotEmpty) {
-        employeeCtrl.paymentTemp.value -= 1;
+        //employeeCtrl.paymentTemp.value -= 1;
         save();
       }
     } catch (e) {

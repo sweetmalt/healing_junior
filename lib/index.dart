@@ -830,10 +830,12 @@ class CozeHintService {
       if (employeeCtrl.phone.value.isEmpty) {
         return '';
       }
+      //余额不足
+    if (employeeCtrl.paymentBalance.value < 5) {
+      Get.snackbar("请先充值", "您的账号余额不足，无法使用AI功能");
+      return "";
+    }
       final token = await employeeCtrl.pay(0.1);
-      if (token.isNotEmpty) {
-        employeeCtrl.paymentTemp.value -= 0.1;
-      }
       return token;
     } catch (e) {
       return '';
@@ -977,10 +979,12 @@ $dialogContent''';
       if (employeeCtrl.phone.value.isEmpty) {
         return '';
       }
+      //余额不足
+    if (employeeCtrl.paymentBalance.value < 1) {
+      Get.snackbar("请先充值", "您的账号余额不足，无法使用AI功能");
+      return "";
+    }
       final token = await employeeCtrl.pay(1);
-      if (token.isNotEmpty) {
-        employeeCtrl.paymentTemp.value -= 1;
-      }
       return token;
     } catch (e) {
       return '';

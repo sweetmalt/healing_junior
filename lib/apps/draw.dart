@@ -309,15 +309,16 @@ class DrawCtrl extends GetxController {
       return;
     }
     //余额不足
-    if (employeeCtrl.paymentBalance.value < 1) {
+    if (employeeCtrl.paymentBalance.value < 2) {
       Get.snackbar("请先充值", "您的账号余额不足，无法使用AI功能");
       return;
     }
-    if (employeeCtrl.paymentTemp.value < 2) {
-      bearer.value = await employeeCtrl.pay(2);
-    }
+    // if (employeeCtrl.paymentTemp.value < 2) {
+    //   bearer.value = await employeeCtrl.pay(2);
+    // }
+    bearer.value = await employeeCtrl.pay(2);
     if (bearer.value.isEmpty) {
-      Get.snackbar("异常提示", "网络故障，请稍后重试");
+      Get.snackbar("异常提示", "获取coze_token失败，请稍后重试");
       return;
     }
     String imagePrompt = "专注度${att.value}%、安全感${med.value}%、松弛感${rel.value}%、心流感${flu.value}% 愉悦感${hap.value}%";
@@ -339,7 +340,7 @@ class DrawCtrl extends GetxController {
             imagePath.value = savePath;
             isImageExists.value = true;
             await save();
-            employeeCtrl.paymentTemp.value -= 2;
+            //employeeCtrl.paymentTemp.value -= 2;
             //如果是安卓平台，则保存到相册
             if (Platform.isAndroid) {
               await Data.saveImageToGallery(savePath);
@@ -366,11 +367,12 @@ class DrawCtrl extends GetxController {
       Get.snackbar("请先充值", "您的账号余额不足，无法使用AI功能");
       return;
     }
-    if (employeeCtrl.paymentTemp.value < 1) {
-      bearer.value = await employeeCtrl.pay(1);
-    }
+    // if (employeeCtrl.paymentTemp.value < 1) {
+    //   bearer.value = await employeeCtrl.pay(1);
+    // }
+    bearer.value = await employeeCtrl.pay(1);
     if (bearer.value.isEmpty) {
-      Get.snackbar("故障", "网络故障，请稍后重试");
+      Get.snackbar("故障", "获取coze_token失败，请稍后重试");
       return;
     }
     try {
@@ -378,7 +380,7 @@ class DrawCtrl extends GetxController {
       debugPrint(analysisPrompt.value);
       analysisText.value = await Data.generateAiText("7581779378108629035", analysisPrompt.value, bearer.value);
       if (analysisText.value.isNotEmpty) {
-        employeeCtrl.paymentTemp.value -= 1;
+        //employeeCtrl.paymentTemp.value -= 1;
         save();
       }
     } catch (e) {
