@@ -625,16 +625,18 @@ class _EmotionEvent {
 /// 混合事件（用于生成混合文本）
 /// 混合事件（用于实时混合显示和报告生成）
 class _MixedEvent {
-  final DateTime timestamp; // 事件时间戳（录音开始为基准的相对时间，用于排序）
+  final DateTime timestamp; // 事件时间戳
   final String type; // 'dialog' or 'emotion'
   final int? speakerId; // 仅 dialog 类型使用
   final String text; // 对话文本或情绪文本
+  final bool isConfirmed; // 是否已确认（definite:true）
 
   _MixedEvent({
     required this.timestamp,
     required this.type,
     this.speakerId,
     required this.text,
+    this.isConfirmed = false,
   });
 }
 
@@ -1282,23 +1284,68 @@ class AIDialogCtrl extends GetxController {
       if (uttText.isNotEmpty) {
         _speakerTexts[speakerId] = uttText;
         _getOrAssignLabel(speakerId);
+
+        // 处理每个 utterance，添加到混合事件列表
+        // 检查该 speaker 是否已有未确认的对话事件
+        final existingUnconfirmed = mixedEvents.any(
+          (e) => e.type == 'dialog' && e.speakerId == speakerId && !e.isConfirmed,
+        );
+
+        if (!existingUnconfirmed) {
+          // 如果没有未确认的事件，添加一个新事件
+          mixedEvents.add(_MixedEvent(
+            timestamp: DateTime.now(),
+            type: 'dialog',
+            speakerId: speakerId,
+            text: uttText,
+            isConfirmed: false,
+          ));
+        } else {
+          // 如果有待确认的事件，更新最后一个未确认事件的文本
+          // 找到该 speaker 最后一个未确认事件
+          final lastUnconfirmedIndex = mixedEvents.lastIndexWhere(
+            (e) => e.type == 'dialog' && e.speakerId == speakerId && !e.isConfirmed,
+          );
+          if (lastUnconfirmedIndex != -1) {
+            // 用新事件替换旧的未确认事件（因为 _MixedEvent 是 final 的）
+            mixedEvents.removeAt(lastUnconfirmedIndex);
+            mixedEvents.add(_MixedEvent(
+              timestamp: DateTime.now(),
+              type: 'dialog',
+              speakerId: speakerId,
+              text: uttText,
+              isConfirmed: false,
+            ));
+          }
+        }
       }
     }
 
-    // 处理已确定的 utterance，创建混合事件（用于实时混合显示）
+    // 处理已确定的 utterance（definite:true），标记为已确认
     if (result.definiteUtterances.isNotEmpty) {
       for (final defUtt in result.definiteUtterances) {
-        // 去重：检查该文本是否已添加过（使用 speakerId + text 组合）
-        final isDuplicate = mixedEvents.any(
-          (e) => e.type == 'dialog' && e.speakerId == defUtt.speakerId && e.text == defUtt.text,
+        // 找到对应的未确认事件，替换为已确认状态
+        final unconfirmedIndex = mixedEvents.lastIndexWhere(
+          (e) => e.type == 'dialog' && e.speakerId == defUtt.speakerId && !e.isConfirmed,
         );
-        if (!isDuplicate) {
-          // 统一使用本机时间戳（与情绪事件保持一致）
+        if (unconfirmedIndex != -1) {
+          // 用已确认的事件替换
+          mixedEvents.removeAt(unconfirmedIndex);
           mixedEvents.add(_MixedEvent(
             timestamp: DateTime.now(),
             type: 'dialog',
             speakerId: defUtt.speakerId,
             text: defUtt.text,
+            isConfirmed: true,
+          ));
+        } else {
+          // 如果没有对应的未确认事件，直接添加
+          mixedEvents.add(_MixedEvent(
+            timestamp: DateTime.now(),
+            type: 'dialog',
+            speakerId: defUtt.speakerId,
+            text: defUtt.text,
+            isConfirmed: true,
           ));
         }
       }
@@ -1322,15 +1369,16 @@ class AIDialogCtrl extends GetxController {
   }
 
   /// 生成混合文本（对话 + 情绪，用于报告和提示问题）
-  /// 直接使用实时记录的 mixedEvents 列表
+  /// 只包含已确认的对话事件 + 所有情绪事件
   String _generateMixedText() {
     if (mixedEvents.isEmpty) return '';
 
-    // mixedEvents 已经在录音过程中按时间顺序添加
-    // 只需要直接生成文本
     final lines = <String>[];
     for (final e in mixedEvents) {
       if (e.type == 'dialog') {
+        // 只包含已确认的对话
+        if (!e.isConfirmed) continue;
+
         String label;
         if (e.speakerId == null || e.speakerId == 0) {
           label = '某';
@@ -1339,6 +1387,7 @@ class AIDialogCtrl extends GetxController {
         }
         lines.add('【$label说】：${e.text}');
       } else {
+        // 情绪事件全部包含
         lines.add('💭 ${e.text}');
       }
     }
@@ -2343,7 +2392,7 @@ class _AIDialogContentState extends State<_AIDialogContent> {
     );
   }
 
-  /// 左侧：完整记录（显示混合事件列表：对话+情绪）
+  /// 左侧：完整记录（实时混合显示对话+情绪事件）
   Widget _buildLeftPanel(AIDialogCtrl ctrl) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2396,30 +2445,28 @@ class _AIDialogContentState extends State<_AIDialogContent> {
                   } else {
                     label = String.fromCharCode(65 + e.speakerId! - 1);
                   }
+                  // 已确认的用正常黑色，未确认的用深灰色
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Text(
                       '【$label说】：${e.text}',
-                      style: const TextStyle(fontSize: 14, height: 1.6),
+                      style: TextStyle(
+                        fontSize: 14,
+                        height: 1.6,
+                        color: e.isConfirmed ? Colors.black87 : Colors.grey[600],
+                      ),
                     ),
                   );
                 } else {
-                  // 情绪事件：显示情绪图标和文本（橙色高亮）
+                  // 情绪事件：显示情绪图标和文本（橙色字体）
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.orange[50],
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        '💭 ${e.text}',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.orange[700],
-                          height: 1.4,
-                        ),
+                    child: Text(
+                      '💭 ${e.text}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.4,
+                        color: Colors.orange[700],
                       ),
                     ),
                   );
