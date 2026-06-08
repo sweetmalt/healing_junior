@@ -116,11 +116,11 @@ class CardohCtrl extends GetxController {
   /// 放大后的圆环半径
   static const double expandedCircleRadius = 400.0;
 
-  /// 圆环最终位置（用于动画终点）：圆心Y = 屏幕高度 + 400 - 240 + 80
-  double get finalCircleCenterY => Get.height + 400 - 240 + 80;
+  /// 圆环最终位置（用于动画终点）：圆心Y = 屏幕高度 + 400 - 240
+  double get finalCircleCenterY => Get.height + 400 - 240;
 
-  /// 扇形圆心Y（固定值，不受动画调整影响）
-  double get fanCircleCenterY => Get.height + 400 - 240;
+  /// 扇形圆心Y（固定值，不受动画调整影响）：整体向上提升80px
+  double get fanCircleCenterY => Get.height + 400 - 240 - 80;
 
   /// 圆环初始中心Y（屏幕正中央）
   double get initialCircleCenterY => Get.height / 2;
