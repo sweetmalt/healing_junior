@@ -24,20 +24,47 @@ class FaceView extends GetView<FaceCtrl> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             MyTextH1(controller.welcome),
-            const SizedBox(height: 80),
+            const SizedBox(height: 20),
             ElevatedButton(
-              child: MyTextH1("脑波检测"),
+              style: ElevatedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10.0),
+                ),
+                padding: EdgeInsets.zero, // 去掉内边距，让图片铺满
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10.0), // 圆角半径
+                child: Image.asset("assets/images/brain_wave_btn.jpg"),
+              ),
               onPressed: () => indexCtrl.updateIndex(2),
             ),
-            const SizedBox(height: 80),
+            const SizedBox(height: 20),
             ElevatedButton(
-              child: MyTextH1("易经卡牌"),
-              onPressed: () => Get.to(() => BaguaView()),
-            ),
-            const SizedBox(height: 80),
-            ElevatedButton(
-              child: MyTextH1("OH卡疗愈"),
+              style: ElevatedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10.0),
+                ),
+                padding: EdgeInsets.zero, // 去掉内边距，让图片铺满
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10.0), // 圆角半径
+                child: Image.asset("assets/images/card_oh_btn.jpg"),
+              ),
               onPressed: () => indexCtrl.updateIndex(1),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10.0),
+                ),
+                padding: EdgeInsets.zero, // 去掉内边距，让图片铺满
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10.0), // 圆角半径
+                child: Image.asset("assets/images/bagua_btn.jpg"),
+              ),
+              onPressed: () => Get.to(() => BaguaView()),
             ),
           ],
         ),

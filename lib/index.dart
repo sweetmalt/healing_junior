@@ -44,6 +44,7 @@ class IndexView extends StatelessWidget {
             ],
           )),
       bottomNavigationBar: Obx(() => BottomNavigationBar(
+            type: BottomNavigationBarType.fixed,
             selectedFontSize: 16,
             unselectedFontSize: 16,
             selectedItemColor: Colors.purple,
