@@ -61,6 +61,9 @@ class CardohCtrl extends GetxController {
   /// 飞行起点位置列表（每张卡一个起点）
   final flyStartPositions = <Offset>[].obs;
 
+  /// 飞行起点旋转角度列表（每张卡一个角度，单位：弧度）
+  final flyStartRotations = <double>[].obs;
+
   /// 当前阶段
   final phase = CardohPhase.select.obs;
 
@@ -250,7 +253,9 @@ class CardohCtrl extends GetxController {
   }
 
   /// 点击扇形中的卡
-  void onFanCardTap(int cardId, Offset cardCenter) {
+  /// [cardCenter] 卡牌中心在屏幕上的位置
+  /// [cardRotation] 卡牌的旋转角度（弧度），0表示水平，pi/2表示垂直指向屏幕下方
+  void onFanCardTap(int cardId, Offset cardCenter, {double? cardRotation}) {
     // 只要不在飞行动画中，就可以抽卡（无论是 fan 还是 viewing 阶段）
     if (isFlying.value) return;
     if (remainingCards.isEmpty) return;
@@ -281,6 +286,10 @@ class CardohCtrl extends GetxController {
       flyStartPositions.clear();
       flyStartPositions.add(cardCenter);
 
+      // 记录飞行起点旋转角度
+      flyStartRotations.clear();
+      flyStartRotations.add(cardRotation ?? 0.0);
+
       // 记录目标槽位
       currentFlyToSlot.value = nextSlot;
 
@@ -294,6 +303,10 @@ class CardohCtrl extends GetxController {
     // 记录飞行起点（不立即移除卡牌，等飞行完成后再移除）
     flyStartPositions.clear();
     flyStartPositions.add(cardCenter);
+
+    // 记录飞行起点旋转角度
+    flyStartRotations.clear();
+    flyStartRotations.add(cardRotation ?? 0.0);
 
     // 设置当前卡（用于飞行动画显示）
     currentCards.value = [cardId];
@@ -1647,9 +1660,9 @@ class _FanCardViewState extends State<_FanCardView> with SingleTickerProviderSta
                     onTap: isDrawn
                         ? null
                         : () {
-                            // 获取卡牌中心位置
+                            // 获取卡牌中心位置和旋转角度
                             final cardCenter = Offset(x, y);
-                            controller.onFanCardTap(cardId, cardCenter);
+                            controller.onFanCardTap(cardId, cardCenter, cardRotation: rotation);
                           },
                     child: Transform.rotate(
                       angle: rotation,
@@ -1757,8 +1770,8 @@ class _FanCardViewState extends State<_FanCardView> with SingleTickerProviderSta
                     child: _FanCard(
                       cardId: pageCards[i],
                       deckType: widget.controller.selectedDeck.value ?? 1,
-                      onTap: (center) {
-                        widget.controller.onFanCardTap(pageCards[i], center);
+                      onTap: (center, rotation) {
+                        widget.controller.onFanCardTap(pageCards[i], center, cardRotation: rotation);
                       },
                     ),
                   ),
@@ -1776,7 +1789,7 @@ class _FanCardViewState extends State<_FanCardView> with SingleTickerProviderSta
 class _FanCard extends StatelessWidget {
   final int cardId;
   final int deckType;
-  final Function(Offset) onTap;
+  final Function(Offset center, double rotation) onTap;
 
   const _FanCard({
     required this.cardId,
@@ -1798,7 +1811,8 @@ class _FanCard extends StatelessWidget {
             pos.dx + cardW / 2,
             pos.dy + cardH / 2,
           );
-          onTap(center);
+          // 扇形视图中的卡没有旋转角度，传入0
+          onTap(center, 0.0);
         }
       },
       child: Container(
@@ -1969,15 +1983,24 @@ class _FlyingCardsViewState extends State<_FlyingCardsView> with SingleTickerPro
           // 翻牌动画：在飞行后期进行（当 eased > 0.6 时开始翻）
           final flipProgress = ((eased - 0.6) / 0.4).clamp(0.0, 1.0);
 
+          // 旋转动画：从初始角度过渡到0度
+          final startRotation = index < widget.controller.flyStartRotations.length
+              ? widget.controller.flyStartRotations[index]
+              : 0.0;
+          final rotation = startRotation * (1.0 - eased);
+
           return Positioned(
             left: x,
             top: y,
             child: Transform.scale(
               scale: scale,
-              child: _FlyingCard(
-                cardId: cards[index],
-                deckType: deckType,
-                flipProgress: flipProgress,
+              child: Transform.rotate(
+                angle: rotation,
+                child: _FlyingCard(
+                  cardId: cards[index],
+                  deckType: deckType,
+                  flipProgress: flipProgress,
+                ),
               ),
             ),
           );
@@ -2060,24 +2083,38 @@ class _FlyingCardsViewState extends State<_FlyingCardsView> with SingleTickerPro
 
           // 如果这个槽位正在飞行中，显示飞行中的卡
           if (isFlying && currentFlySlot == index && flyingCardId != null) {
-            // 飞行起点：使用用户点击的卡的位置
+            // 飞行起点：使用用户点击的卡的位置（中心点）
             final startPos = widget.controller.flyStartPositions.isNotEmpty
                 ? widget.controller.flyStartPositions.first
                 : Offset(screenSize.width / 2, widget.controller.fanCircleCenterY);
+            // 目标位置（中心点）
             final targetPos = pos;
+            // 转为左上角位置进行插值
+            final startLeft = startPos.dx - cardW / 2;
+            final startTop = startPos.dy - cardH / 2;
+            final targetLeft = targetPos.dx - cardW / 2;
+            final targetTop = targetPos.dy - cardH / 2;
             final eased = Curves.easeOut.transform(flyProgress);
-            final x = startPos.dx + (targetPos.dx - startPos.dx) * eased;
-            final y = startPos.dy + (targetPos.dy - startPos.dy) * eased;
+            final x = startLeft + (targetLeft - startLeft) * eased;
+            final y = startTop + (targetTop - startTop) * eased;
             // 翻牌动画
             final flipProgress = ((eased - 0.6) / 0.4).clamp(0.0, 1.0);
+            // 旋转动画：从初始角度过渡到0度
+            final startRotation = widget.controller.flyStartRotations.isNotEmpty
+                ? widget.controller.flyStartRotations.first
+                : 0.0;
+            final rotation = startRotation * (1.0 - eased);
 
             return Positioned(
               left: x,
               top: y,
-              child: _FlyingCard(
-                cardId: flyingCardId,
-                deckType: deckType,
-                flipProgress: flipProgress,
+              child: Transform.rotate(
+                angle: rotation,
+                child: _FlyingCard(
+                  cardId: flyingCardId,
+                  deckType: deckType,
+                  flipProgress: flipProgress,
+                ),
               ),
             );
           }
