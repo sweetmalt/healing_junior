@@ -77,7 +77,7 @@ class IndexView extends StatelessWidget {
           duration: const Duration(milliseconds: 200),
           child: isRecording
               ? const _RecordingIndicator() // 录音中：动态图标
-              : const Icon(Icons.wechat_rounded, key: ValueKey('chat')),
+              : const Icon(Icons.wechat_rounded, key: ValueKey('chat')), // 空闲中
         ),
       );
     });
@@ -368,6 +368,13 @@ class VolcASRService {
     _isRecording = false;
     _cleanup();
     onStateChange?.call('idle');
+  }
+
+  /// 强制停止：无论当前状态如何，彻底清理所有资源
+  /// 用于长暂停后重建 session 前的强制清理
+  void forceStop() {
+    _isRecording = false;
+    _cleanup();
   }
 
   void _cleanup() {
@@ -1589,10 +1596,13 @@ class AIDialogCtrl extends GetxController {
   }
 
   Future<void> stopRecording() async {
-    if (!isRecording.value && state.value == AIDialogState.idle) return;
+    // idle 状态无需处理
+    if (state.value == AIDialogState.idle) return;
 
     _isSessionActive = false;
 
+    _elapsedTimer?.cancel();
+    _elapsedTimer = null;
     _reanalysisTimer?.cancel();
     _reanalysisTimer = null;
     _hintTimer?.cancel();
@@ -2120,21 +2130,30 @@ class AIDialogCtrl extends GetxController {
     // ignore: avoid_print
     print('[AIDialog] 提示问题API参数内容:\n$truncated');
 
-    // 调用Coze生成提示问题（Bot内部已做去重）
+    // 调用Coze生成提示问题
     final question = await CozeHintService.generateHint(
       conversation: truncated,
     );
 
+    // ignore: avoid_print
+    print('[AIDialog] _generateHint API returned: "${question.length}" chars, content: "$question"');
     if (question.isNotEmpty) {
       _addHint(question);
     }
   }
 
   void _addHint(String question) {
-    if (!_shownHints.contains(question)) {
-      _shownHints.add(question);
-      hints.add(question);
+    // ignore: avoid_print
+    print('[AIDialog] _addHint called: "$question"');
+    if (_shownHints.contains(question)) {
+      // ignore: avoid_print
+      print('[AIDialog] _addHint filtered (duplicate): $_shownHints');
+      return;
     }
+    _shownHints.add(question);
+    hints.add(question);
+    // ignore: avoid_print
+    print('[AIDialog] _addHint added, hints now: ${hints.length}');
   }
 
   String getConversationSummary() {
@@ -2558,6 +2577,7 @@ class _AIDialogContentState extends State<_AIDialogContent> {
   /// 右侧：对话区域
   Widget _buildRightPanel(AIDialogCtrl ctrl, ScrollController scrollController) {
     // 右侧：只显示提示性问题
+    // ⚠️ 注意：Obx 回调必须无参数，且内部 Get.find() 才能正确追踪响应式变量
     return Obx(() {
       final aiCtrl = Get.find<AIDialogCtrl>();
       final hintList = aiCtrl.hints;
@@ -2665,7 +2685,7 @@ class _AIDialogContentState extends State<_AIDialogContent> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Obx(() {
               final aiCtrl = Get.find<AIDialogCtrl>();
-              final recording = aiCtrl.isRecording.value;
+              final aiState = aiCtrl.state.value;
               final isGenerating = aiCtrl.isGeneratingReport.value;
 
               return Row(
@@ -2695,8 +2715,8 @@ class _AIDialogContentState extends State<_AIDialogContent> {
                       ),
                     ),
 
-                  // 录音按钮
-                  if (!recording)
+                  // 状态按钮逻辑
+                  if (aiState == AIDialogState.idle)
                     ElevatedButton(
                       onPressed: aiCtrl.startRecording,
                       style: ElevatedButton.styleFrom(
@@ -2706,15 +2726,35 @@ class _AIDialogContentState extends State<_AIDialogContent> {
                       ),
                       child: const Text('开始AI分析'),
                     )
-                  else
+                  else if (aiState == AIDialogState.connecting)
                     ElevatedButton(
-                      onPressed: aiCtrl.confirmStopRecording,
+                      onPressed: null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.grey,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                      ),
+                      child: const Text('连接中...'),
+                    )
+                  else if (aiState == AIDialogState.recording)
+                    ElevatedButton(
+                      onPressed: aiCtrl.stopRecording,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.red,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
                       ),
-                      child: const Text('停止分析'),
+                      child: const Text('结束'),
+                    )
+                  else if (aiState == AIDialogState.error)
+                    ElevatedButton(
+                      onPressed: aiCtrl.startRecording,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                      ),
+                      child: const Text('重新开始'),
                     ),
                 ],
               );
