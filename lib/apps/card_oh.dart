@@ -155,13 +155,17 @@ class CardohCtrl extends GetxController {
     hasSavedCircleState.value = true;
   }
 
-  /// 卡牌初始尺寸
+  /// 卡牌初始尺寸（环形卡牌堆尺寸）
   static const double cardW0 = 60.0;
   static const double cardH0 = 80.0;
 
-  /// 卡牌最终尺寸
+  /// 卡牌最终尺寸（扇形卡尺寸）
   static const double cardW1 = 120.0;
   static const double cardH1 = 160.0;
+
+  /// 初始卡牌堆尺寸（洗牌前的大卡）
+  static const double stackedCardW = 90.0;
+  static const double stackedCardH = 120.0;
 
   // ==================== 常量 ====================
 
@@ -247,17 +251,46 @@ class CardohCtrl extends GetxController {
 
   /// 点击扇形中的卡
   void onFanCardTap(int cardId, Offset cardCenter) {
-    // 四卡连抽模式：取消四槽模式
-    if (fourDrawMode.value) {
-      cancelFourDraw();
-      return;
-    }
-
     // 只要不在飞行动画中，就可以抽卡（无论是 fan 还是 viewing 阶段）
     if (isFlying.value) return;
     if (remainingCards.isEmpty) return;
     if (!remainingCards.contains(cardId)) return; // 确保这张卡还在剩余卡里
 
+    // 四卡连抽模式：为下一个空槽位抽卡（按顺序：当下0→卡点1→突破2→理想3）
+    if (fourDrawMode.value) {
+      // 找到下一个空槽位（按顺序）
+      int? nextSlot;
+      for (int i = 0; i < 4; i++) {
+        if (!filledSlots.contains(i)) {
+          nextSlot = i;
+          break;
+        }
+      }
+      if (nextSlot == null) return; // 所有槽位都满了
+
+      // 使用用户点击的卡
+      final selectedCard = cardId;
+
+      // 更新剩余卡（移除选中的卡）
+      remainingCards.remove(selectedCard);
+
+      // 设置当前卡（用于飞行动画显示）
+      currentCards.value = [selectedCard];
+
+      // 记录飞行起点（从点击的卡位置）
+      flyStartPositions.clear();
+      flyStartPositions.add(cardCenter);
+
+      // 记录目标槽位
+      currentFlyToSlot.value = nextSlot;
+
+      // 标记飞行状态
+      isFlying.value = true;
+      flyProgress.value = 0.0;
+      return;
+    }
+
+    // 普通单卡模式
     // 记录飞行起点（不立即移除卡牌，等飞行完成后再移除）
     flyStartPositions.clear();
     flyStartPositions.add(cardCenter);
@@ -272,11 +305,6 @@ class CardohCtrl extends GetxController {
 
   /// 飞行动画完成
   void onFlyComplete() {
-    // 从剩余卡中移除飞出去的卡
-    if (currentCards.isNotEmpty) {
-      remainingCards.remove(currentCards.first);
-    }
-
     // 如果在四卡连抽模式
     if (fourDrawMode.value) {
       isFlying.value = false;
@@ -317,9 +345,13 @@ class CardohCtrl extends GetxController {
         phase.value = CardohPhase.viewing;
         selectedCardIndex.value = null;
       }
-      // 如果还没抽完4张，继续等待用户点击剩余槽位
+      // 如果还没抽完4张，继续等待用户点击扇形
     } else {
-      // 普通单卡模式
+      // 普通单卡模式：从剩余卡中移除飞出去的卡
+      if (currentCards.isNotEmpty) {
+        remainingCards.remove(currentCards.first);
+      }
+
       isFlying.value = false;
       flyProgress.value = 0.0;
 
@@ -376,55 +408,21 @@ class CardohCtrl extends GetxController {
     slotPositions.value = positions;
   }
 
-  /// 点击槽位
+  /// 点击槽位（用于查看已填充的卡；空白槽位无交互）
   void onSlotClicked(int slotIndex) {
     // 必须在四卡连抽模式
     if (!fourDrawMode.value) return;
     // 不能在飞行中
     if (isFlying.value) return;
-    // 这个槽位已经被填充了
-    if (filledSlots.contains(slotIndex)) return;
-    // 剩余卡不够了
-    if (remainingCards.isEmpty) return;
+    // 空白槽位无交互
+    if (!filledSlots.contains(slotIndex)) return;
 
-    // 随机选1张
-    final random = Random();
-    final remainingCopy = List<int>.from(remainingCards);
-    final idx = random.nextInt(remainingCopy.length);
-    final selectedCard = remainingCopy.removeAt(idx);
-
-    // 更新剩余卡
-    remainingCards.value = remainingCopy;
-
-    // 设置当前卡
-    currentCards.value = [selectedCard];
-
-    // 计算飞行起点：卡牌在环形上的实际位置
-    final allCards = fanDisplayCards;
-    final cardIdx = allCards.indexOf(selectedCard);
-    Offset startPos;
-
-    if (cardIdx >= 0) {
-      // 卡牌在环形上的角度
-      final angle = (2 * pi * cardIdx / allCards.length) - pi / 2 + circleRotation.value;
-      final x = Get.width / 2 + cos(angle) * savedScale;
-      final y = savedOffsetY + sin(angle) * savedScale;
-      startPos = Offset(x, y);
-    } else {
-      // 兜底：使用扇形圆心
-      startPos = Offset(Get.width / 2, fanCircleCenterY);
+    // 槽位已填充：选中该卡进行查看
+    final cardIndex = filledSlots.indexOf(slotIndex);
+    if (cardIndex >= 0 && cardIndex < fourDrawCards.length) {
+      currentCards.value = [fourDrawCards[cardIndex]];
+      selectedCardIndex.value = 0;
     }
-
-    // 记录飞行起点
-    flyStartPositions.clear();
-    flyStartPositions.add(startPos);
-
-    // 记录目标槽位
-    currentFlyToSlot.value = slotIndex;
-
-    // 标记飞行状态
-    isFlying.value = true;
-    flyProgress.value = 0.0;
   }
 
   /// 重置四卡连抽状态
@@ -862,7 +860,7 @@ class _StackedCardsView extends StatelessWidget {
                 child: _buildStackedDeck(),
               )),
           const SizedBox(height: 32),
-          // 提示文字
+          // 提示文字或洗牌按钮
           Obx(() {
             if (controller.selectedDeck.value == null) {
               return const Text(
@@ -873,11 +871,41 @@ class _StackedCardsView extends StatelessWidget {
                 ),
               );
             }
-            return const Text(
-              '点击卡牌堆开始洗牌',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.black45,
+            // 点击洗牌按钮
+            return GestureDetector(
+              onTap: () => controller.startShuffle(),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.15),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.shuffle,
+                      color: Color(0xFF4DB6AC),
+                      size: 20,
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      '点击洗牌',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Color(0xFF2A2A4E),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             );
           }),
@@ -900,31 +928,33 @@ class _StackedCardsView extends StatelessWidget {
   }
 
   Widget _buildCardStack(int? deckType, int count) {
-    // 整齐堆叠的卡牌效果，尺寸 60x80
+    // 整齐堆叠的卡牌效果，尺寸 90x120
+    const cardW = CardohCtrl.stackedCardW;
+    const cardH = CardohCtrl.stackedCardH;
     return SizedBox(
-      width: 60,
-      height: 80,
+      width: cardW,
+      height: cardH,
       child: Stack(
         children: List.generate(count.clamp(0, 12), (index) {
           // 越在下面的卡偏移越小，创造整齐堆叠效果
-          final offset = index * 0.3;
+          final offset = index * 0.4;
           return Positioned(
             left: offset,
             top: offset,
             child: Container(
-              width: 60 - offset,
-              height: 80 - offset * 1.2,
+              width: cardW - offset,
+              height: cardH - offset * 1.2,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(8),
                 image: const DecorationImage(
                   image: AssetImage('assets/images/card_one_bk.jpg'),
                   fit: BoxFit.cover,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.2),
-                    blurRadius: 2,
-                    offset: Offset(1 - offset * 0.1, 2 - offset * 0.15),
+                    color: Colors.black.withValues(alpha: 0.25),
+                    blurRadius: 4,
+                    offset: Offset(1.5 - offset * 0.1, 2.5 - offset * 0.15),
                   ),
                 ],
               ),
@@ -1097,6 +1127,8 @@ class _ShufflePageState extends State<_ShufflePage> with TickerProviderStateMixi
               offsetY: _offsetYAnim.value,
               cardW: _cardWAnim.value,
               cardH: _cardHAnim.value,
+              shuffleCardW: CardohCtrl.stackedCardW,
+              shuffleCardH: CardohCtrl.stackedCardH,
               cardTargets: _cardTargets,
               centerX: MediaQuery.of(context).size.width / 2,
               cardBackImage: CardohCtrl.cardBackImage,
@@ -1137,8 +1169,10 @@ class _ShufflePainter extends CustomPainter {
   final double moveProgress; // 移动进度 0.0~1.0
   final double scale; // 当前半径
   final double offsetY; // 圆心Y位置
-  final double cardW; // 当前卡牌宽度
-  final double cardH; // 当前卡牌高度
+  final double cardW; // 环形卡牌宽度（移动阶段终点尺寸：60→120）
+  final double cardH; // 环形卡牌高度（移动阶段终点尺寸：80→160）
+  final double shuffleCardW; // 散开阶段起始卡牌宽度（90）
+  final double shuffleCardH; // 散开阶段起始卡牌高度（120）
   final List<_CardTarget> cardTargets;
   final double centerX; // 屏幕中心X
   final ui.Image? cardBackImage; // 预加载的卡背图片
@@ -1150,6 +1184,8 @@ class _ShufflePainter extends CustomPainter {
     required this.offsetY,
     required this.cardW,
     required this.cardH,
+    required this.shuffleCardW,
+    required this.shuffleCardH,
     required this.cardTargets,
     required this.centerX,
     this.cardBackImage,
@@ -1198,11 +1234,16 @@ class _ShufflePainter extends CustomPainter {
       // 旋转角度：从初始角度插值到最终角度
       final currentRotation = target.initialRotation + (target.finalRotation - target.initialRotation) * curved;
 
+      // 当前卡牌尺寸：散开阶段从大卡（90×120）缩小到小卡（60×80）
+      // cardW/cardH 在散开阶段结束后等于 60/80，移动阶段继续动画到 120/160
+      final currentCardW = shuffleCardW + (cardW - shuffleCardW) * shuffleProgress;
+      final currentCardH = shuffleCardH + (cardH - shuffleCardH) * shuffleProgress;
+
       // 绘制卡牌
       final rect = Rect.fromCenter(
         center: Offset(currentX, currentY),
-        width: cardW,
-        height: cardH,
+        width: currentCardW,
+        height: currentCardH,
       );
 
       canvas.save();
@@ -1247,7 +1288,9 @@ class _ShufflePainter extends CustomPainter {
         oldDelegate.scale != scale ||
         oldDelegate.offsetY != offsetY ||
         oldDelegate.cardW != cardW ||
-        oldDelegate.cardH != cardH;
+        oldDelegate.cardH != cardH ||
+        oldDelegate.shuffleCardW != shuffleCardW ||
+        oldDelegate.shuffleCardH != shuffleCardH;
   }
 }
 
@@ -2017,8 +2060,10 @@ class _FlyingCardsViewState extends State<_FlyingCardsView> with SingleTickerPro
 
           // 如果这个槽位正在飞行中，显示飞行中的卡
           if (isFlying && currentFlySlot == index && flyingCardId != null) {
-            // 计算飞行中的卡位置（从扇形中心飞到槽位）
-            final startPos = Offset(screenSize.width / 2, widget.controller.fanCircleCenterY);
+            // 飞行起点：使用用户点击的卡的位置
+            final startPos = widget.controller.flyStartPositions.isNotEmpty
+                ? widget.controller.flyStartPositions.first
+                : Offset(screenSize.width / 2, widget.controller.fanCircleCenterY);
             final targetPos = pos;
             final eased = Curves.easeOut.transform(flyProgress);
             final x = startPos.dx + (targetPos.dx - startPos.dx) * eased;
@@ -2057,20 +2102,15 @@ class _FlyingCardsViewState extends State<_FlyingCardsView> with SingleTickerPro
     );
   }
 
-  /// 构建空槽位按钮
+  /// 构建空槽位（静态占位符，无交互）
   Widget _buildEmptySlot(int slotIndex) {
-    return GestureDetector(
-      onTap: () {
-        widget.controller.onSlotClicked(slotIndex);
-      },
-      child: Container(
-        width: CardohCtrl.fanCardW,
-        height: CardohCtrl.fanCardH,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: const Color(0xFF4DB6AC), width: 2),
-          color: Colors.transparent,
-        ),
+    return Container(
+      width: CardohCtrl.fanCardW,
+      height: CardohCtrl.fanCardH,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFF4DB6AC), width: 2),
+        color: Colors.transparent,
       ),
     );
   }

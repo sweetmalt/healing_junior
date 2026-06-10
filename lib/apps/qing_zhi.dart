@@ -198,18 +198,18 @@ class QingZhiView extends GetView<QingZhiCtrl> {
                   QingZhiDocView(),
                 ],
               ),
-              ExpansionTile(
-                initiallyExpanded: true,
-                leading: Icon(Icons.navigate_next_rounded),
-                expandedCrossAxisAlignment: CrossAxisAlignment.start,
-                collapsedShape: Border(top: BorderSide(color: colorPrimary)),
-                shape: Border(top: BorderSide(color: colorPrimary)),
-                title: MyTextP1("情志疗愈音乐"),
-                subtitle: MyTextP3("上海音乐学院 · 人工智能音乐疗愈重点实验室", colorPrimaryContainer),
-                children: [
-                  QingZhiMUsicView(),
-                ],
-              ),
+              // ExpansionTile(
+              //   initiallyExpanded: true,
+              //   leading: Icon(Icons.navigate_next_rounded),
+              //   expandedCrossAxisAlignment: CrossAxisAlignment.start,
+              //   collapsedShape: Border(top: BorderSide(color: colorPrimary)),
+              //   shape: Border(top: BorderSide(color: colorPrimary)),
+              //   title: MyTextP1("情志疗愈音乐"),
+              //   subtitle: MyTextP3("上海音乐学院 · 人工智能音乐疗愈重点实验室", colorPrimaryContainer),
+              //   children: [
+              //     QingZhiMUsicView(),
+              //   ],
+              // ),
             ])));
   }
 }
