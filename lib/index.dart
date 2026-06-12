@@ -1054,9 +1054,17 @@ class AIDialogCtrl extends GetxController {
   final elapsedSeconds = 0.obs; // 录音持续秒数
   Timer? _elapsedTimer;
 
-  // ========== 左侧：当前完整全文（用于检测长度等其他用途）==========
+  // ========== 左侧：当前完整全文（实时文本，仅来自 ASR 的 speakerTexts）==========
+  /// 备用字段：仅包含 ASR 实时识别出的 speakerTexts，不含已确认对话和情绪事件
+  /// 注意：与 reportableText（响应式单一真源）不同——后者混合了已确认 + 实时 + 情绪
+  /// 如果未来需要"纯实时文本"的快速访问，可保留；否则可删除
   final currentFullText = ''.obs;
   String _lastDisplayText = ''; // 上次显示的全文，用于去重
+
+  // ========== 可报告文本（响应式，单一真源）==========
+  /// 窗体里显示的内容 = 报告生成的内容
+  /// 包含：已确认对话 + 实时对话 + 情绪事件（按时间线排序）
+  final reportableText = ''.obs;
 
   // ========== 每个speaker的累积文本（用于分析和整理）==========
   final Map<int, String> _speakerTexts = {};
@@ -1124,7 +1132,6 @@ class AIDialogCtrl extends GetxController {
   // ========== 报告相关 ==========
   final reportList = <ReportInfo>[].obs; // 已存储的报告列表
   final isGeneratingReport = false.obs; // 是否正在生成报告
-  final _showReportButton = false.obs; // 是否显示"生成报告"按钮
   final cardohReportMarkdown = "".obs;
   final _readReports = <String>{}.obs; // 已读报告文件名集合
 
@@ -1390,6 +1397,9 @@ class AIDialogCtrl extends GetxController {
     }).join('\n');
     currentFullText.value = markedText;
 
+    // 刷新可报告文本（响应式单一真源）
+    _refreshReportableText();
+
     // 防抖重新分析（避免频繁调用）
     _reAnalyzeDebounced();
   }
@@ -1436,9 +1446,13 @@ class AIDialogCtrl extends GetxController {
     return lines.join('\n');
   }
 
-  /// 生成完整文本（包含所有内容：已确认对话 + 实时文本 + 情绪）
-  /// 用于报告生成 - 包含所有识别内容，包括未最终确认的
-  String _generateAllText() {
+  /// 可报告文本（混合：已确认 + 实时 + 情绪事件，按时间线排序）
+  /// 单一真源：既是"窗体里显示的内容"，也是报告生成的内容
+  ///
+  /// ⚠️ 警告：提示问题 API（CozeHintService）不要用这个方法！
+  ///    提示问题 API 应使用 _generateMixedText()（已确认 + 情绪，不含实时）
+  ///    因为实时文本未最终确认，可能包含错字、不完整句子，会误导提示生成
+  String _buildReportableText() {
     final lines = <String>[];
     final now = DateTime.now();
 
@@ -1491,6 +1505,16 @@ class AIDialogCtrl extends GetxController {
     }
 
     return lines.join('\n');
+  }
+
+  /// 刷新可报告文本（响应式字段 reportableText）
+  /// 应在以下时机调用：
+  /// 1. ASR 实时返回新文本时（_onPartialResult）
+  /// 2. 重新分析时（_reAnalyze）
+  /// 3. 结束录音时（stopRecording）
+  /// 4. 开始新会话时无需调用，由 _resetState 清空
+  void _refreshReportableText() {
+    reportableText.value = _buildReportableText();
   }
 
   Future<void> startRecording() async {
@@ -1554,6 +1578,8 @@ class AIDialogCtrl extends GetxController {
     processedDialogs.clear();
     hints.clear();
     _shownHints.clear();
+    // 清空可报告文本（新会话开始前必须重置，否则按钮可见性会基于旧数据）
+    reportableText.value = '';
     // 说话人标签已简化为 speakerId 直接作为标签，无需清理
     emotionEvents.clear();
     displayEvents.clear();
@@ -1615,10 +1641,12 @@ class AIDialogCtrl extends GetxController {
     // 停止前做一次最终分析
     _reAnalyze();
 
-    // 判断是否显示"生成报告"按钮
-    // 条件：全部内容>=500字 且 包含已确认对话
-    final allText = _generateAllText();
-    _showReportButton.value = allText.length >= 500 && confirmedDialogs.isNotEmpty;
+    // 刷新可报告文本（_reAnalyze 内部已调用一次，这里再保险一次，确保最终状态一致）
+    _refreshReportableText();
+
+    // "生成报告"按钮的可见性由 showReportButton getter 派生自 reportableText
+    // 条件：reportableText.length >= 500 && !isGeneratingReport
+    // （已确认对话 + 实时文本 + 情绪事件，按时间线混合）
     //
     final customerCtrl = Get.find<CustomerCtrl>();
     if (customerCtrl.isRecording.value) {
@@ -1711,8 +1739,8 @@ class AIDialogCtrl extends GetxController {
       Get.snackbar('提示', '报告正在生成中...', snackPosition: SnackPosition.BOTTOM);
       return false;
     }
-    // 检查是否有内容
-    if (currentFullText.value.isEmpty) {
+    // 检查是否有内容（使用可报告文本，与按钮可见性判定同源）
+    if (reportableText.value.isEmpty) {
       Get.snackbar('提示', '请先进行录音', snackPosition: SnackPosition.BOTTOM);
       return false;
     }
@@ -1732,14 +1760,9 @@ class AIDialogCtrl extends GetxController {
         clientName = customerCtrl.nickname.value.isNotEmpty ? customerCtrl.nickname.value : '来访者';
       } catch (_) {}
 
-      // 构建对话内容（使用完整文本：已确认对话 + 实时文本 + 情绪）
-      // 必须包含已确认对话内容
-      if (confirmedDialogs.isEmpty) {
-        isGeneratingReport.value = false;
-        Get.snackbar('提示', '请先完成录音对话', snackPosition: SnackPosition.BOTTOM);
-        return false;
-      }
-      final dialogContent = _generateAllText();
+      // 构建对话内容（使用 reportableText，与按钮可见性判定同源）
+      // 包含：已确认对话 + 实时对话 + 情绪事件，按时间线排序
+      final dialogContent = reportableText.value;
 
       // 限制字数：超过5000字时只取最新5000字（越到最后的内容越有价值）
       final limitedContent = dialogContent.length > 5000 ? dialogContent.substring(dialogContent.length - 5000) : dialogContent;
@@ -2056,7 +2079,11 @@ class AIDialogCtrl extends GetxController {
   }
 
   /// 获取是否显示生成报告按钮
-  bool get showReportButton => _showReportButton.value && !isGeneratingReport.value;
+  /// 条件：可报告文本长度 >= 500 字 且 不在生成报告中
+  /// 单一真源：reportableText（已确认对话 + 实时对话 + 情绪事件，按时间线混合）
+  bool get showReportButton =>
+      reportableText.value.length >= 500 &&
+      !isGeneratingReport.value;
 
   /// 重新分析并生成对话视图
   /// 基于每个speaker的累积文本，按标点分割成句子后分析
@@ -2099,6 +2126,9 @@ class AIDialogCtrl extends GetxController {
 
     // 4. 更新UI
     processedDialogs.assignAll(newDialogs);
+
+    // 5. 刷新可报告文本（情绪事件可能在此流程中被触发）
+    _refreshReportableText();
   }
 
   /// 按标点分割文本为句子
