@@ -2254,7 +2254,7 @@ class _AIDialogContentState extends State<_AIDialogContent> {
   // 记录上次提示数量，用于检测变化
   int _lastHintCount = 0;
   // 当前选中的标签：0=录音, 1=提示
-  int _selectedTab = 0;
+  int _selectedTab = 1;
 
   @override
   void dispose() {
