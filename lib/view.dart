@@ -419,7 +419,12 @@ class MyView extends GetView<MyCtrl> {
                   alignment: Alignment.center,
                   transformAlignment: Alignment.center,
                   height: 200,
-                  child: MyTextP3("Copyright 2026 HealingAI", colorPrimaryContainer),
+                  child: Column(
+                    children:[
+                      MyTextP3("( 不可用于医疗建议 )", colorPrimaryContainer),
+                      MyTextP3("Copyright 2026 HealingAI", colorPrimaryContainer),
+                    ]
+                  ),
                 ),
               ),
             ],

@@ -55,7 +55,7 @@ class WelcomeView extends GetView<WelcomeCtrl> {
 class WelcomeCtrl extends GetxController {
   String project = "HealingAI";
   String app = "BrainView";
-  String title = "基于 BCI 的生命体征洞察工具箱";
+  String title = "基于 BCI 的非医疗级情绪洞察工具箱";
 }
 
 
