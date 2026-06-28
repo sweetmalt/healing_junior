@@ -3,7 +3,7 @@ import 'package:get/get.dart';
 import 'package:healing_junior/index.dart';
 import 'package:healing_junior/view.dart';
 
-List<String> emoLabels = ["恐惧-", "愤怒-", "警觉+", "欢喜+", "焦虑-", "紧张-", "兴奋+", "快乐+", "厌恶-", "烦恼-", "镇定+", "放松+", "郁闷-", "悲伤-", "平静+", "满足+"];
+List<String> emoLabels = ["恐惧-", "愤怒-", "警觉+", "欢喜+", "焦虑-", "紧张-", "兴奋+", "快乐+", "厌恶-", "烦恼-", "镇定+", "放松+", "忧虑-", "悲伤-", "平静+", "满足+"];
 
 class TrendView extends GetView<TrendCtrl> {
   TrendView({super.key});

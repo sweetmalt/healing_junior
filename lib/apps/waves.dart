@@ -11,39 +11,70 @@ class WavesButtons extends GetView<WavesCtrl> {
   });
   @override
   Widget build(BuildContext context) {
+    // === 视觉优化(2026-06-28)===
+    // 5 个按钮对应 5 条脑波线(isShowLine0..4)。
+    // 显示时:彩色实心 + 圆角 + 白色文字
+    // 隐藏时:同色 30% 不透明 + 灰色描边 + 灰色文字
+    // 这样颜色始终与上方曲线呼应,一眼看出"哪个波被隐藏"
+    final labels = const ['Delta', 'Theta', 'Alpha', 'Beta', 'Gamma'];
     return Container(
       alignment: Alignment.center,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          TextButton(
-              onPressed: () {
-                controller.isShowLine0.value = !controller.isShowLine0.value;
-              },
-              child: Text("· Delta ·", style: TextStyle(color: colorSecondary, backgroundColor: colors5[0]))),
-          TextButton(
-              onPressed: () {
-                controller.isShowLine1.value = !controller.isShowLine1.value;
-              },
-              child: Text("· Theta ·", style: TextStyle(color: colorSecondary, backgroundColor: colors5[1]))),
-          TextButton(
-              onPressed: () {
-                controller.isShowLine2.value = !controller.isShowLine2.value;
-              },
-              child: Text("· Alpha ·", style: TextStyle(color: colorSecondary, backgroundColor: colors5[2]))),
-          TextButton(
-              onPressed: () {
-                controller.isShowLine3.value = !controller.isShowLine3.value;
-              },
-              child: Text("· Beta ·", style: TextStyle(color: colorSecondary, backgroundColor: colors5[3]))),
-          TextButton(
-              onPressed: () {
-                controller.isShowLine4.value = !controller.isShowLine4.value;
-              },
-              child: Text("· Gamma ·", style: TextStyle(color: colorSecondary, backgroundColor: colors5[4]))),
-        ],
+        children: List.generate(5, (i) {
+          return Obx(() {
+            final bool show = _isShow(i);
+            final Color color = colors5[i];
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: TextButton(
+                onPressed: () => _toggle(i),
+                style: TextButton.styleFrom(
+                  backgroundColor: show ? color : color.withValues(alpha: 0.3),
+                  side: show
+                      ? BorderSide.none
+                      : BorderSide(color: Colors.grey.shade400, width: 1.5),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                ),
+                child: Text(
+                  labels[i],
+                  style: TextStyle(
+                    color: show ? colorSecondary : Colors.grey.shade400,
+                    fontWeight: show ? FontWeight.w600 : FontWeight.w400,
+                  ),
+                ),
+              ),
+            );
+          });
+        }),
       ),
     );
+  }
+
+  /// 工具方法:按索引读取 5 个 isShowLineX
+  bool _isShow(int i) {
+    switch (i) {
+      case 0: return controller.isShowLine0.value;
+      case 1: return controller.isShowLine1.value;
+      case 2: return controller.isShowLine2.value;
+      case 3: return controller.isShowLine3.value;
+      case 4: return controller.isShowLine4.value;
+      default: return true;
+    }
+  }
+
+  /// 工具方法:按索引翻转 5 个 isShowLineX
+  void _toggle(int i) {
+    switch (i) {
+      case 0: controller.isShowLine0.value = !controller.isShowLine0.value; break;
+      case 1: controller.isShowLine1.value = !controller.isShowLine1.value; break;
+      case 2: controller.isShowLine2.value = !controller.isShowLine2.value; break;
+      case 3: controller.isShowLine3.value = !controller.isShowLine3.value; break;
+      case 4: controller.isShowLine4.value = !controller.isShowLine4.value; break;
+    }
   }
 }
 
