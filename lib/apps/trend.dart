@@ -221,19 +221,20 @@ class EmoValue extends StatelessWidget {
       ),
       child: Column(
         children: [
-          const MyTextP2("情绪效价与激活度"),
-          MyTextP3("（情绪分型坐标图）", colorPrimaryContainer),
+          const MyTextP2("情绪分型识别 - 云图"),
+          MyTextP3("（情绪效价与激活度）", colorPrimaryContainer),
           const SizedBox(height: 80),
           const _QuadrantChart(),
           const SizedBox(height: 40),
           ExpansionTile(
             leading: Icon(Icons.restore_rounded),
-            collapsedShape: Border(top: BorderSide(color: colorSurface)),
-            shape: Border(top: BorderSide(color: colorSurface)),
-            title: MyTextP2("情绪效价表：Birds $totalBirds & Cribs $totalCribs"),
+            //collapsedShape: Border(top: BorderSide(color: colorSurface)),
+            shape: Border(top: BorderSide(color: colorSurface), bottom: BorderSide(color: colorSurface)),
+            title: MyTextP2("效价详表 Birds $totalBirds & Cribs $totalCribs"),
             subtitle: MyTextP3("收获的正向情绪 & 被克制的负向情绪", colorPrimaryContainer),
             children: [
               _HealingTable(data: data),
+              const SizedBox(height: 20),
             ],
           ),
           const SizedBox(height: 40),
@@ -274,7 +275,7 @@ class _HealingTable extends StatelessWidget {
             ),
             Container(
               alignment: Alignment.centerRight,
-              child: MyTextP2("${data[i] > 0 ? '+' : ''} ${data[i].toString()}"),
+              child: MyTextP2("${data[i] > 0 ? '/' : ''} ${data[i].toString()}"),
             ),
           ]),
       ],
