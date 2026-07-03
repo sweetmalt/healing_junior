@@ -114,6 +114,14 @@ class WavesView extends GetView<WavesCtrl> {
         width: screenWidth,
         height: controller.height.value,
         child: Obx(() {
+          // ⚠️ 兜底防御 (2026-07-03 老张揪出 LateInitializationError)：
+          // 读 .length 强制 Obx 追踪 dataFlSpot0 列表变化（addSpots/clearSpots 时重建）。
+          // 检查任意 spot 有效才渲染 LineChart，避免 paint 时 mostLeftSpot 未初始化。
+          final hasData = controller.dataFlSpot0.isNotEmpty &&
+              controller.dataFlSpot0.any((s) => !s.isNull());
+          if (!hasData) {
+            return const SizedBox.shrink();
+          }
           return LineChart(
             duration: const Duration(milliseconds: 950),
             LineChartData(
@@ -283,12 +291,12 @@ class WavesCtrl extends GetxController {
   static const int listBuffer = 5;
   /// 全局 X 计数器(永远递增,确保 X 编号单调,曲线不会因重新编号跳动)
   double _globalCounter = 0;
-  RxList<FlSpot> dataFlSpotBaseline = <FlSpot>[FlSpot.nullSpot].obs;
-  RxList<FlSpot> dataFlSpot0 = <FlSpot>[FlSpot.nullSpot].obs;
-  RxList<FlSpot> dataFlSpot1 = <FlSpot>[FlSpot.nullSpot].obs;
-  RxList<FlSpot> dataFlSpot2 = <FlSpot>[FlSpot.nullSpot].obs;
-  RxList<FlSpot> dataFlSpot3 = <FlSpot>[FlSpot.nullSpot].obs;
-  RxList<FlSpot> dataFlSpot4 = <FlSpot>[FlSpot.nullSpot].obs;
+  RxList<FlSpot> dataFlSpotBaseline = <FlSpot>[FlSpot(0, 0)].obs;
+  RxList<FlSpot> dataFlSpot0 = <FlSpot>[FlSpot(0, 0)].obs;
+  RxList<FlSpot> dataFlSpot1 = <FlSpot>[FlSpot(0, 0)].obs;
+  RxList<FlSpot> dataFlSpot2 = <FlSpot>[FlSpot(0, 0)].obs;
+  RxList<FlSpot> dataFlSpot3 = <FlSpot>[FlSpot(0, 0)].obs;
+  RxList<FlSpot> dataFlSpot4 = <FlSpot>[FlSpot(0, 0)].obs;
   final RxBool isShowLine0 = true.obs;
   final RxBool isShowLine1 = true.obs;
   final RxBool isShowLine2 = true.obs;
@@ -437,12 +445,18 @@ class WavesCtrl extends GetxController {
     dataFlSpot2.clear();
     dataFlSpot3.clear();
     dataFlSpot4.clear();
-    dataFlSpotBaseline.add(FlSpot.nullSpot);
-    dataFlSpot0.add(FlSpot.nullSpot);
-    dataFlSpot1.add(FlSpot.nullSpot);
-    dataFlSpot2.add(FlSpot.nullSpot);
-    dataFlSpot3.add(FlSpot.nullSpot);
-    dataFlSpot4.add(FlSpot.nullSpot);
+    // ⚠️ 修复 LateInitializationError (2026-07-03 老张揪出)：
+    // fl_chart 的 LineChartBarData 构造函数要求 spots 中至少有 1 个非 nullSpot，
+    // 否则 mostLeftSpot/mostTopSpot/mostRightSpot/mostBottomSpot 这 4 个 late 字段
+    // 永远未初始化，paint 时 drawBelowBar 访问 → LateError。
+    // 之前 clearSpots 用 [FlSpot.nullSpot] 占位，会在"clearData 之后 addSpots 之前"
+    // 触发 paint 红屏。这里改为 [FlSpot(0, 0)] 有效占位。
+    dataFlSpotBaseline.add(FlSpot(0, 0));
+    dataFlSpot0.add(FlSpot(0, 0));
+    dataFlSpot1.add(FlSpot(0, 0));
+    dataFlSpot2.add(FlSpot(0, 0));
+    dataFlSpot3.add(FlSpot(0, 0));
+    dataFlSpot4.add(FlSpot(0, 0));
     // 重置全局计数器,X 窗口归零
     _globalCounter = 0;
     minX.value = 0;
