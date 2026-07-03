@@ -68,6 +68,7 @@ class CustomerView extends GetView<CustomerCtrl> {
       child: Obx(() => Column(
             children: <Widget>[
               ListTile(
+                leading: Icon(Icons.phonelink_ring),
                 title: TextFormField(
                   controller: phoneController,
                   focusNode: phoneFocus,
@@ -92,33 +93,18 @@ class CustomerView extends GetView<CustomerCtrl> {
                   onChanged: (value) => controller.phone.value = value,
                 ),
               ),
-              ListTile(
-                leading: Icon(Icons.chat_rounded),
-                title: Text('顾客昵称: ${controller.nickname.value}'),
-              ),
-              ListTile(
-                leading: Icon(Icons.phone_rounded),
-                title: Text('联系电话: ${controller.phone.value}'),
-              ),
-              ListTile(
-                leading: controller.sex.value == '男' ? Icon(Icons.male_rounded) : Icon(Icons.female_rounded),
-                title: Text('顾客性别: ${controller.sex.value}'),
-              ),
-              ListTile(
-                leading: Icon(Icons.calendar_month_rounded),
-                title: Text('顾客生日: ${controller.birthday.value}'),
-              ),
-              ListTile(
-                leading: Icon(Icons.history_rounded),
-                title: Text('顾客年龄: ${controller.age.value}'),
-              ),
-              ListTile(
-                leading: Icon(Icons.calendar_month_rounded),
-                title: Text('顾客最近一次到店时间: ${controller.recordLastAt.value}'),
-              ),
-              ListTile(
-                leading: controller.isLock.value ? Icon(Icons.lock_rounded) : Icon(Icons.lock_open_rounded),
-                title: Text("服务状态: ${controller.isLock.value ? '已锁定' : '正常'}"),
+              Column(
+                mainAxisAlignment: MainAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  MyTextP2('顾客昵称: ${controller.nickname.value}'),
+                  MyTextP2('联系电话: ${controller.phone.value}'),
+                  MyTextP2('顾客性别: ${controller.sex.value}'),
+                  MyTextP2('顾客生日: ${controller.birthday.value}'),
+                  MyTextP2('顾客年龄: ${controller.age.value}'),
+                  MyTextP2('顾客最近一次到店时间: ${controller.recordLastAt.value}'),
+                  MyTextP2("服务状态: ${controller.isLock.value ? '已锁定' : '正常'}"),
+                ],
               ),
               ListTile(
                 leading: Icon(Icons.grading_rounded),

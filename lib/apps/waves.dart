@@ -31,9 +31,7 @@ class WavesButtons extends GetView<WavesCtrl> {
                 onPressed: () => _toggle(i),
                 style: TextButton.styleFrom(
                   backgroundColor: show ? color : color.withValues(alpha: 0.3),
-                  side: show
-                      ? BorderSide.none
-                      : BorderSide(color: Colors.grey.shade400, width: 1.5),
+                  side: show ? BorderSide.none : BorderSide(color: Colors.grey.shade400, width: 1.5),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -57,23 +55,39 @@ class WavesButtons extends GetView<WavesCtrl> {
   /// 工具方法:按索引读取 5 个 isShowLineX
   bool _isShow(int i) {
     switch (i) {
-      case 0: return controller.isShowLine0.value;
-      case 1: return controller.isShowLine1.value;
-      case 2: return controller.isShowLine2.value;
-      case 3: return controller.isShowLine3.value;
-      case 4: return controller.isShowLine4.value;
-      default: return true;
+      case 0:
+        return controller.isShowLine0.value;
+      case 1:
+        return controller.isShowLine1.value;
+      case 2:
+        return controller.isShowLine2.value;
+      case 3:
+        return controller.isShowLine3.value;
+      case 4:
+        return controller.isShowLine4.value;
+      default:
+        return true;
     }
   }
 
   /// 工具方法:按索引翻转 5 个 isShowLineX
   void _toggle(int i) {
     switch (i) {
-      case 0: controller.isShowLine0.value = !controller.isShowLine0.value; break;
-      case 1: controller.isShowLine1.value = !controller.isShowLine1.value; break;
-      case 2: controller.isShowLine2.value = !controller.isShowLine2.value; break;
-      case 3: controller.isShowLine3.value = !controller.isShowLine3.value; break;
-      case 4: controller.isShowLine4.value = !controller.isShowLine4.value; break;
+      case 0:
+        controller.isShowLine0.value = !controller.isShowLine0.value;
+        break;
+      case 1:
+        controller.isShowLine1.value = !controller.isShowLine1.value;
+        break;
+      case 2:
+        controller.isShowLine2.value = !controller.isShowLine2.value;
+        break;
+      case 3:
+        controller.isShowLine3.value = !controller.isShowLine3.value;
+        break;
+      case 4:
+        controller.isShowLine4.value = !controller.isShowLine4.value;
+        break;
     }
   }
 }
@@ -117,8 +131,7 @@ class WavesView extends GetView<WavesCtrl> {
           // ⚠️ 兜底防御 (2026-07-03 老张揪出 LateInitializationError)：
           // 读 .length 强制 Obx 追踪 dataFlSpot0 列表变化（addSpots/clearSpots 时重建）。
           // 检查任意 spot 有效才渲染 LineChart，避免 paint 时 mostLeftSpot 未初始化。
-          final hasData = controller.dataFlSpot0.isNotEmpty &&
-              controller.dataFlSpot0.any((s) => !s.isNull());
+          final hasData = controller.dataFlSpot0.isNotEmpty && controller.dataFlSpot0.any((s) => !s.isNull());
           if (!hasData) {
             return const SizedBox.shrink();
           }
@@ -160,8 +173,8 @@ class WavesView extends GetView<WavesCtrl> {
                   show: controller.isShowLine0.value,
                   color: colors5[0],
                   isCurved: controller.isCurved.value,
-                  isStrokeCapRound: true,                            // P3 圆头
-                  preventCurveOverShooting: true,                    // P4 防过冲
+                  isStrokeCapRound: true, // P3 圆头
+                  preventCurveOverShooting: true, // P4 防过冲
                   dotData: const FlDotData(show: false),
                   // P1 渐变填充:线下 0.4 不透明 → 上方 0.0 不透明
                   belowBarData: BarAreaData(
@@ -281,14 +294,18 @@ class WavesCtrl extends GetxController {
   // === 流畅度优化核心字段(2026-06-27) ===
   /// X 轴滑动窗口左边界(由 addSpots 自动维护,Obx 监听后驱动 LineChart 平移)
   final RxDouble minX = 0.0.obs;
+
   /// X 轴滑动窗口右边界(总是等于最新一个点的 X 坐标)
   final RxDouble maxX = 0.0.obs;
+
   /// 滑动窗口容量(老张 2026-06-28 决定:固定 30,取消之前的 60/300 双模式切换)
   static const int windowSize = 30;
+
   /// list 内多保留的"溢出"点数(老张 2026-06-28:让最左边的点超出屏幕再裁掉,避免画面左边缘"切一绺")
   /// 屏幕上只显示最近 windowSize 个 X,但 list 内多保留 listBuffer 个点,这些点的 X < minX,
   /// 在屏幕左边缘外,被 ClipData 自动裁切,addSpots 时 removeAt(0) 移走的也是它们——画面看不到。
   static const int listBuffer = 5;
+
   /// 全局 X 计数器(永远递增,确保 X 编号单调,曲线不会因重新编号跳动)
   double _globalCounter = 0;
   RxList<FlSpot> dataFlSpotBaseline = <FlSpot>[FlSpot(0, 0)].obs;
@@ -370,8 +387,8 @@ class WavesCtrl extends GetxController {
     if (spots.length != 5) {
       return false;
     }
-    final int listCap = _currentCapacity;       // list 容量 = 35
-    final int winSize = windowSize;              // 屏幕显示窗口 = 30
+    final int listCap = _currentCapacity; // list 容量 = 35
+    final int winSize = windowSize; // 屏幕显示窗口 = 30
 
     // === 启动期:一次性用 nullSpot 灌满 list ===
     // 灌到 listCap (35) 个,确保启动后前 5 秒新数据进来时,最老的点仍在 list 内
@@ -408,7 +425,7 @@ class WavesCtrl extends GetxController {
     dataFlSpotBaseline.add(FlSpot(x, 0.0));
     double s = 0.0;
     const double u = 40.0;
-    const int b= 10000;
+    const int b = 10000;
     s = spots[0] / b + 3.0;
     s = s > u ? u : s;
     dataFlSpot0.add(FlSpot(x, s));

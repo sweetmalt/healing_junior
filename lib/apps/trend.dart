@@ -575,9 +575,7 @@ class _EmotionTimeline extends StatelessWidget {
           if (groups.isEmpty) {
             width = constraints.maxWidth;
           } else {
-            width = (groups.length * _tickWidth)
-                .clamp(_tickWidth, double.infinity)
-                .toDouble();
+            width = (groups.length * _tickWidth).clamp(_tickWidth, double.infinity).toDouble();
           }
           return SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -656,17 +654,15 @@ class _EmotionTick extends StatelessWidget {
   });
 
   /// 转折点判定（老张 2026-07-03 升级算法）：
-///   - 4 个正向 → positiveStrong（深蓝）
-///   - 3 个正向 → positiveLight（浅蓝）
-///   - 0 正 4 负 → negative（橙底白字）
-///   - 其他    → normal（灰底深字）
-///
-/// 只看 +/- 计数，不区分具体情绪类目。
-TickKind get _kind {
-    final posCount =
-        group.where((i) => emoLabels[i].endsWith('+')).length;
-    final negCount =
-        group.where((i) => emoLabels[i].endsWith('-')).length;
+  ///   - 4 个正向 → positiveStrong（深蓝）
+  ///   - 3 个正向 → positiveLight（浅蓝）
+  ///   - 0 正 4 负 → negative（橙底白字）
+  ///   - 其他    → normal（灰底深字）
+  ///
+  /// 只看 +/- 计数，不区分具体情绪类目。
+  TickKind get _kind {
+    final posCount = group.where((i) => emoLabels[i].endsWith('+')).length;
+    final negCount = group.where((i) => emoLabels[i].endsWith('-')).length;
     if (posCount == 4) return TickKind.positiveStrong;
     if (posCount == 3) return TickKind.positiveLight;
     if (posCount == 0 && negCount == 4) return TickKind.negative;
@@ -674,12 +670,10 @@ TickKind get _kind {
   }
 
   /// 上方 4 槽：正向情绪列表。
-  List<int> get _positiveSlots =>
-      group.where((i) => emoLabels[i].endsWith('+')).toList();
+  List<int> get _positiveSlots => group.where((i) => emoLabels[i].endsWith('+')).toList();
 
   /// 下方 4 槽：负向情绪列表。
-  List<int> get _negativeSlots =>
-      group.where((i) => emoLabels[i].endsWith('-')).toList();
+  List<int> get _negativeSlots => group.where((i) => emoLabels[i].endsWith('-')).toList();
 
   // === 尺寸常量 ===
   static const double _iconSize = 20;
@@ -706,10 +700,7 @@ TickKind get _kind {
         for (int i = 0; i < positives.length; i++)
           Positioned(
             left: centerX,
-            top: axisY -
-                _badgeSize -
-                1 -
-                (positives.length - i) * (_iconSize + _iconSpacing),
+            top: axisY - _badgeSize - 1 - (positives.length - i) * (_iconSize + _iconSpacing),
             child: _birdIcon(positives[i], size: _iconSize),
           ),
 
@@ -727,10 +718,7 @@ TickKind get _kind {
         for (int i = 0; i < negatives.length; i++)
           Positioned(
             left: centerX,
-            top: axisY +
-                _badgeSize / 2 +
-                1 +
-                i * (_iconSize + _iconSpacing),
+            top: axisY + _badgeSize / 2 + 1 + i * (_iconSize + _iconSpacing),
             child: _cribIcon(negatives[i], size: _iconSize),
           ),
       ],
@@ -738,8 +726,7 @@ TickKind get _kind {
   }
 
   Widget _birdIcon(int idx, {required double size}) {
-    return Image.asset('assets/images/Bird.png',
-        width: size, height: size, fit: BoxFit.contain);
+    return Image.asset('assets/images/Bird.png', width: size, height: size, fit: BoxFit.contain);
   }
 
   Widget _cribIcon(int idx, {required double size}) {
