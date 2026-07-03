@@ -240,7 +240,7 @@ class EmoValue extends StatelessWidget {
       ),
       child: Column(
         children: [
-          const MyTextP2("情绪分型识别 - 云图"),
+          const MyTextP2("情绪分型“晴雨表” - 云图"),
           MyTextP3("（情绪效价与激活度）", colorPrimaryContainer),
           const SizedBox(height: 80),
           const _QuadrantChart(),
@@ -249,17 +249,19 @@ class EmoValue extends StatelessWidget {
             leading: Icon(Icons.restore_rounded),
             //collapsedShape: Border(top: BorderSide(color: colorSurface)),
             shape: Border(top: BorderSide(color: colorSurface), bottom: BorderSide(color: colorSurface)),
-            title: MyTextP2("效价详表 Birds $totalBirds & Cribs $totalCribs"),
+            title: MyTextP2("情绪效价详情 Birds $totalBirds & Cribs $totalCribs"),
             subtitle: MyTextP3("收获的正向情绪 & 被克制的负向情绪", colorPrimaryContainer),
             children: [
               _HealingTable(data: data),
               const SizedBox(height: 20),
             ],
           ),
-          const SizedBox(height: 40),
-          const MyTextP2("情绪转折时刻表"),
-          MyTextP3("（一个刻度大约对应1分钟的情绪数据）", colorPrimaryContainer),
+          const SizedBox(height: 20),
+          const MyTextP2("情绪疗愈“时刻表”"),
+          MyTextP3("（一个刻度约等于1分钟的情绪数据）", colorPrimaryContainer),
           const _EmotionTimeline(),
+          MyTextP3("蓝色为正向收益转折点、橙色为负向克制转折点", colorPrimaryContainer),
+          const SizedBox(height: 20),
         ],
       ),
     );
