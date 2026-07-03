@@ -150,12 +150,22 @@ class TrendCtrl extends GetxController {
   /// RxList 配合 EmoValue 内的 Obx 实现精准重建。
   final RxList<int> emoValues = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0].obs;
 
+  /// 时间轴数据源：每个元素是一组（4 次 trend() 调用）的 4 个情绪索引。
+  /// 时间轴 UI 层读取此列表生成每分钟刻度。
+  final RxList<List<int>> emotionGroups = <List<int>>[].obs;
+
+  /// 时间轴组缓冲：4 次 trend() 凑成一组，满了就推入 [emotionGroups] 并清空。
+  final List<int> _pendingGroup = [];
+
   /// 根据 5 个频段趋势方向累加 emoValues，并通知 AI 对话。
   ///
   /// 原实现是 5 层 if-else（298 行），现已重构为查表：
   ///   1. 编码 5 个 sign → 唯一整数 key（3 进制位）
   ///   2. 在 [_trendLookup] 中查找对应 emoValues 下标
   ///   3. 命中则累加 + 上报 AI；否则保持原行为（不动 emoValues、不上报）
+  ///
+  /// 同时把当次产出的情绪索引累入 [_pendingGroup]，
+  /// **每 4 次调用 = 1 个时间轴 group**（约 64 个数据点 ≈ 1 分钟）。
   ///
   /// ⚠️ 行为契约：与原 if-else 完全等价。
   /// 原代码外层 `if (betaTrendSign < 0)` / else 各自累加不同 emoValues，
@@ -182,12 +192,21 @@ class TrendCtrl extends GetxController {
     // IndexCtrl 仅在本方法使用，改为局部变量避免无谓的字段占用。
     final indexCtrl = Get.put(IndexCtrl());
     indexCtrl.injectEmotion(trendEmos.join(','));
+
+    // 时间轴：累入缓冲，4 个一组。
+    _pendingGroup.add(idx);
+    if (_pendingGroup.length >= 4) {
+      emotionGroups.add(List<int>.from(_pendingGroup));
+      _pendingGroup.clear();
+    }
   }
 
   void init() {
     for (int i = 0; i < emoValues.length; i++) {
       emoValues[i] = 0;
     }
+    emotionGroups.clear();
+    _pendingGroup.clear();
   }
 }
 
@@ -238,6 +257,9 @@ class EmoValue extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 40),
+          const MyTextP2("情绪转折时刻表"),
+          MyTextP3("（一个刻度大约对应1分钟的情绪数据）", colorPrimaryContainer),
+          const _EmotionTimeline(),
         ],
       ),
     );
@@ -275,7 +297,7 @@ class _HealingTable extends StatelessWidget {
             ),
             Container(
               alignment: Alignment.centerRight,
-              child: MyTextP2("${data[i] > 0 ? '/' : ''} ${data[i].toString()}"),
+              child: MyTextP2(" ${data[i].toString()}"),
             ),
           ]),
       ],
@@ -503,4 +525,286 @@ class _EllipsePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// ==================== 情绪转折时刻表（又称情绪时间轴） ====================
+///
+/// 老张 2026-07-03 命名：本模块叫"情绪转折时刻表"。
+///
+/// **核心结构**：横贯整个时间轴区域的**一条水平线**（"轴线"），
+/// 每个刻度 = 轴线上**贴一个数字徽章**（数字画在小圆点里）+ 徽章上方挂鸟 + 下方挂木马。
+///
+///   ────●────●────●────●────●────●────●────  ← 轴线（CustomPaint 画 1 条横线）
+///      1️⃣   2️⃣  3️⃣  4️⃣  5️⃣  6️⃣  7️⃣
+///     🦅                🦅🦅🦅🦅
+///
+/// **绝对定位**：每个 tick 的所有元素都以"轴线"为唯一锚点，
+/// 不依赖 Column center，徽章**始终贴在轴线 y 上**。
+///
+/// **空状态**：还没收到任何情绪组时，轴线横贯整个父级可用宽度（占满屏幕），
+/// 提示用户"这里将出现情绪转折点"；收到第一个 group 后切回按 tick 数计算宽度。
+///
+/// 横向溢出时 SingleChildScrollView 滚动。
+class _EmotionTimeline extends StatelessWidget {
+  const _EmotionTimeline();
+
+  /// 每格间距
+  static const double _tickWidth = 30;
+
+  /// 时间轴区域总高（老张 2026-07-03 决定从 200 提升到 240，
+  /// 容纳 4 槽图标 (4×22) + 徽章 (22) + 上下边距，避免图标被裁切）
+  static const double _axisHeight = 240;
+
+  /// 轴线 y 坐标（区域中心）
+  static const double _axisY = 120;
+
+  @override
+  Widget build(BuildContext context) {
+    final ctrl = Get.find<TrendCtrl>();
+    // LayoutBuilder 在外层（拿到父级可用宽度，避免空状态时 SizedBox width 退化为 30px）。
+    // Obx 在内层（直接读 ctrl.emotionGroups，GetX 才能正确建立依赖追踪）。
+    return LayoutBuilder(
+      builder: (ctx, constraints) {
+        return Obx(() {
+          final groups = ctrl.emotionGroups;
+          // 空状态：让 SizedBox 宽度 = 父级可用宽度（横贯整个屏幕，提示"等待数据"）
+          // 有数据：按 tick 数计算宽度，溢出时 SingleChildScrollView 横向滚动
+          final double width;
+          if (groups.isEmpty) {
+            width = constraints.maxWidth;
+          } else {
+            width = (groups.length * _tickWidth)
+                .clamp(_tickWidth, double.infinity)
+                .toDouble();
+          }
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: width,
+              height: _axisHeight,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  // 1. 横贯轴线：CustomPaint 画 1 条横线（贯穿整个 SizedBox 宽度）
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: _axisY - 0.5,
+                    child: CustomPaint(
+                      size: Size(width, 1),
+                      painter: _AxisLinePainter(),
+                    ),
+                  ),
+                  // 2. 每个刻度：Positioned 绝对定位（空状态时不渲染）
+                  for (int i = 0; i < groups.length; i++)
+                    Positioned(
+                      left: i * _tickWidth,
+                      width: _tickWidth,
+                      top: 0,
+                      height: _axisHeight,
+                      child: _EmotionTick(
+                        tickNumber: i + 1,
+                        group: groups[i],
+                        axisY: _axisY,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        });
+      },
+    );
+  }
+}
+
+/// 时间轴横线：1 条灰线横贯整个宽度。
+class _AxisLinePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.grey
+      ..strokeWidth = 1;
+    canvas.drawLine(
+      Offset(0, size.height / 2),
+      Offset(size.width, size.height / 2),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// 单个时间轴刻度：内部用 Stack + Positioned 绝对定位，
+/// **以 axisY（轴线 y 坐标）为唯一锚点**，不受图标数量影响。
+///
+///   - 上方最多 4 只小鸟：从下往上向轴线收敛（最靠近轴线 = 最新）
+///   - 中线：数字徽章（22×22 圆点），**贴在轴线上**
+///   - 下方最多 4 只木马：从上往下向轴线收敛
+class _EmotionTick extends StatelessWidget {
+  final int tickNumber;
+  final List<int> group;
+  final double axisY;
+
+  const _EmotionTick({
+    required this.tickNumber,
+    required this.group,
+    required this.axisY,
+  });
+
+  /// 转折点判定（老张 2026-07-03 升级算法）：
+///   - 4 个正向 → positiveStrong（深蓝）
+///   - 3 个正向 → positiveLight（浅蓝）
+///   - 0 正 4 负 → negative（橙底白字）
+///   - 其他    → normal（灰底深字）
+///
+/// 只看 +/- 计数，不区分具体情绪类目。
+TickKind get _kind {
+    final posCount =
+        group.where((i) => emoLabels[i].endsWith('+')).length;
+    final negCount =
+        group.where((i) => emoLabels[i].endsWith('-')).length;
+    if (posCount == 4) return TickKind.positiveStrong;
+    if (posCount == 3) return TickKind.positiveLight;
+    if (posCount == 0 && negCount == 4) return TickKind.negative;
+    return TickKind.normal;
+  }
+
+  /// 上方 4 槽：正向情绪列表。
+  List<int> get _positiveSlots =>
+      group.where((i) => emoLabels[i].endsWith('+')).toList();
+
+  /// 下方 4 槽：负向情绪列表。
+  List<int> get _negativeSlots =>
+      group.where((i) => emoLabels[i].endsWith('-')).toList();
+
+  // === 尺寸常量 ===
+  static const double _iconSize = 20;
+  static const double _iconSpacing = 2; // 图标间垂直间距
+  static const double _badgeSize = 22;
+
+  @override
+  Widget build(BuildContext context) {
+    final positives = _positiveSlots;
+    final negatives = _negativeSlots;
+    final kind = _kind;
+
+    // 居中偏移：徽章和图标都在 30px tick 宽度内居中
+    final centerX = (30 - _iconSize) / 2;
+    final badgeX = (30 - _badgeSize) / 2;
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        // === 上方 4 槽小鸟：从下往上向轴线收敛 ===
+        // 最靠近轴线的是 positives 的最后一个（即"最新一个正向情绪"），
+        // 所以放在 axisY - _badgeSize - 1（紧贴徽章上方）
+        // 依次往上排：axisY - _badgeSize - 1 - i * (_iconSize + _iconSpacing)
+        for (int i = 0; i < positives.length; i++)
+          Positioned(
+            left: centerX,
+            top: axisY -
+                _badgeSize -
+                1 -
+                (positives.length - i) * (_iconSize + _iconSpacing),
+            child: _birdIcon(positives[i], size: _iconSize),
+          ),
+
+        // === 中线：数字徽章贴在轴线上 ===
+        Positioned(
+          left: badgeX,
+          top: axisY - _badgeSize / 2,
+          child: _TickBadge(number: tickNumber, kind: kind),
+        ),
+
+        // === 下方 4 槽木马：从上往下向轴线收敛 ===
+        // 最靠近轴线的是 negatives 的第一个（即"最新一个负向情绪"），
+        // 所以放在 axisY + _badgeSize / 2 + 1（紧贴徽章下方）
+        // 依次往下排：axisY + _badgeSize / 2 + 1 + i * (_iconSize + _iconSpacing)
+        for (int i = 0; i < negatives.length; i++)
+          Positioned(
+            left: centerX,
+            top: axisY +
+                _badgeSize / 2 +
+                1 +
+                i * (_iconSize + _iconSpacing),
+            child: _cribIcon(negatives[i], size: _iconSize),
+          ),
+      ],
+    );
+  }
+
+  Widget _birdIcon(int idx, {required double size}) {
+    return Image.asset('assets/images/Bird.png',
+        width: size, height: size, fit: BoxFit.contain);
+  }
+
+  Widget _cribIcon(int idx, {required double size}) {
+    return Icon(Icons.crib_rounded, size: size, color: Colors.grey);
+  }
+}
+
+/// 数字徽章状态枚举：决定徽章的底色和字色。
+enum TickKind {
+  /// 普通刻度：灰底深字
+  normal,
+
+  /// 强正向转折（4 正）：深蓝底白字
+  positiveStrong,
+
+  /// 弱正向转折（3 正）：浅蓝底白字
+  positiveLight,
+
+  /// 负向转折（0 正 4 负）：橙底白字
+  negative,
+}
+
+/// 数字徽章：数字画在小圆点里。
+/// 颜色按 [TickKind] 决定：4 正深蓝、3 正浅蓝、4 负橙、其余灰。
+class _TickBadge extends StatelessWidget {
+  final int number;
+  final TickKind kind;
+  const _TickBadge({required this.number, required this.kind});
+
+  @override
+  Widget build(BuildContext context) {
+    final Color bg;
+    final Color fg;
+    switch (kind) {
+      case TickKind.positiveStrong:
+        bg = Colors.blue.shade800;
+        fg = Colors.white;
+        break;
+      case TickKind.positiveLight:
+        bg = Colors.blue.shade300;
+        fg = Colors.white;
+        break;
+      case TickKind.negative:
+        bg = Colors.orange;
+        fg = Colors.white;
+        break;
+      case TickKind.normal:
+        bg = Colors.grey.shade300;
+        fg = Colors.black87;
+        break;
+    }
+    return Container(
+      width: 22,
+      height: 22,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: bg,
+        shape: BoxShape.circle,
+      ),
+      child: Text(
+        '$number',
+        style: TextStyle(
+          color: fg,
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
 }
