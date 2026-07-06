@@ -478,7 +478,7 @@ class EmoValue extends StatelessWidget {
       ),
       child: Column(
         children: [
-          const MyTextP2("情绪分型“晴雨表” - 云图"),
+          const MyTextP2("情绪云图"),
           MyTextP3("（情绪效价与激活度）", colorPrimaryContainer),
           const SizedBox(height: 80),
           const _QuadrantChart(),
@@ -495,7 +495,7 @@ class EmoValue extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 20),
-          const MyTextP2("情绪疗愈“时刻表”"),
+          const MyTextP2("情绪波动“时刻表”"),
           MyTextP3("（刻度单位：分钟）", colorPrimaryContainer),
           const _EmotionTimeline(),
           const SizedBox(height: 20),
