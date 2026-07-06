@@ -32,6 +32,35 @@ List<String> emoLabels = [
 /// UI 中显示为"Bird"（正向情绪）的下标集合，用于收益统计。
 const Set<int> _positiveEmotionIndexes = {2, 3, 6, 7, 10, 11, 14, 15};
 
+/// 16 种情绪的关键词定义（学术严谨版）。
+///
+/// 来源依据：
+/// - PANAS（Watson, Clark & Tellegen, 1988）：正负向情绪量表 20 词
+/// - Plutchik 情绪轮（1980）：8 基本情绪
+/// - Russell 效价-激活度环模型（1980）：4 象限分类
+/// - 中医七情：喜、怒、忧、思、悲、恐、惊
+///
+/// 索引一一对应 [emoLabels]；每组 3 个中文关键词，按"由强到弱"组织。
+const List<List<String>> emoKeywords = [
+  // ===== 负向情绪 =====
+  ['惊慌', '戒备', '警惕危险'], // 0 恐惧-
+  ['激愤', '敌意', '攻击性'], // 1 愤怒-
+  ['警觉', '专注', '清醒'], // 2 警觉+
+  ['欢欣', '雀跃', '喜悦'], // 3 欢喜+
+  ['担忧', '不安', '提心吊胆'], // 4 焦虑-
+  ['紧绷', '应激', '压力'], // 5 紧张-
+  ['激动', '热情', '活力'], // 6 兴奋+
+  ['开心', '愉悦', '愉快'], // 7 快乐+
+  ['反感', '排斥', '嫌恶'], // 8 厌恶-
+  ['烦躁', '不快', '心烦'], // 9 烦恼-
+  ['从容', '淡定', '不慌不忙'], // 10 镇定+
+  ['松弛', '安逸', '舒坦'], // 11 放松+
+  ['忧愁', '牵挂', '放心不下'], // 12 忧虑-
+  ['哀伤', '失落', '忧郁'], // 13 悲伤-
+  ['安宁', '宁静', '心静'], // 14 平静+
+  ['满足', '满意', '知足'], // 15 满足+
+];
+
 /// 把 1 个 sign 编码为 0/1/2（负/零/正）。
 int _signCodeOf(double s) => s < 0 ? 0 : (s > 0 ? 2 : 1);
 
@@ -129,6 +158,194 @@ Map<int, int> _buildLookup() {
 
 /// ==================== TrendView ====================
 
+/// 一次"转正时刻"的不可变快照。
+///
+/// [emotions] 是该时刻的 4 个情绪索引（[emoLabels] 下标，可能含负向）。
+/// [posCount] 是其中正向情绪的个数（3 或 4，老张 2026-07-04 决定放宽到 3 正）。
+/// [minute] 是它出现的时间点（= [TrendCtrl.emotionGroups] 在此次写入时的长度）。
+class TurningPoint {
+  final int minute;
+  final List<int> emotions;
+  final int posCount;
+  const TurningPoint({
+    required this.minute,
+    required this.emotions,
+    required this.posCount,
+  });
+}
+
+/// 情绪转正时刻详情面板：实时罗列测试过程中出现的所有转正组（3 正 / 4 正）。
+///
+/// 数据来源 [TrendCtrl.turningPoints]：
+/// - 每行 1 个转正时刻
+/// - 左侧：时间点 + 每个情绪的标签和 3 个关键词
+/// - 右侧：圆圈串，按正向情绪出现顺序排列（3 或 4 个圆圈 + 横线连接）
+/// - 圆圈底色按强度区分：4 正深蓝（Colors.blue.shade800）/ 3 正浅蓝（Colors.blue.shade300）
+///
+/// 解耦设计：与时间轴 [_EmotionTimeline] 互不依赖，两组件共享 TrendCtrl 的 RxList 数据源。
+class _TurningPointDetail extends StatelessWidget {
+  const _TurningPointDetail();
+
+  /// 圆圈尺寸（与时间轴 tick 徽章 22 对齐）
+  static const double _circleSize = 22;
+
+  /// 圆圈间距
+  static const double _circleGap = 6;
+
+  @override
+  Widget build(BuildContext context) {
+    final ctrl = Get.find<TrendCtrl>();
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Obx(() {
+            // 读 .length 强制 Obx 追踪 turningPoints 列表变化（trend() 中追加时重建）
+            final list = ctrl.turningPoints;
+            if (list.isEmpty) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: MyTextP3(
+                  '情绪转正时刻将出现在这里',
+                  Colors.grey,
+                ),
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final tp in list) _buildEntry(tp),
+              ],
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEntry(TurningPoint tp) {
+    final positiveIndexes = tp.emotions
+        .where((i) => _positiveEmotionIndexes.contains(i))
+        .toList();
+    // 强度色：4 正深蓝 / 3 正浅蓝
+    final color = tp.posCount == 4 ? Colors.blue.shade800 : Colors.blue.shade300;
+
+    return Padding(
+      padding: const EdgeInsets.only( bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 左侧：时间点 + 情绪详情
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                MyTextP2('情绪转正时刻 / 第 ${tp.minute} 分钟（${tp.posCount} +）'),
+                const SizedBox(height: 4),
+                for (final idx in tp.emotions)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 12, top: 2),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        MyTextP2('• ${emoLabels[idx]}'),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: MyTextP3(
+                            '· ${emoKeywords[idx].join('、')}',
+                            colorPrimaryContainer,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          // 右侧：圆圈串（按出现顺序串连）
+          _PositivesCircleRow(
+            emotionIndexes: positiveIndexes,
+            color: color,
+            circleSize: _circleSize,
+            circleGap: _circleGap,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 圆圈串：按顺序排列的 [circleSize] 圆圈 + 横线连接，圆圈内显示情绪首关键词。
+///
+/// 视觉布局：圆圈对齐在同一行（baseline 居中），圆圈间用横线连接，
+/// 横线 y 坐标与圆圈中心对齐。
+class _PositivesCircleRow extends StatelessWidget {
+  final List<int> emotionIndexes;
+  final Color color;
+  final double circleSize;
+  final double circleGap;
+
+  const _PositivesCircleRow({
+    required this.emotionIndexes,
+    required this.color,
+    required this.circleSize,
+    required this.circleGap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // 圆圈串总宽度 = n*circleSize + (n-1)*circleGap
+    // 用 Stack + Positioned 把圆圈和连接线画在同一行
+    final n = emotionIndexes.length;
+    if (n == 0) return const SizedBox.shrink();
+
+    final totalWidth = n * circleSize + (n - 1) * circleGap;
+    return SizedBox(
+      width: totalWidth,
+      height: circleSize,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // 连接线：在每两个相邻圆圈之间画一条短横线
+          for (int i = 0; i < n - 1; i++)
+            Positioned(
+              left: i * (circleSize + circleGap) + circleSize - 1,
+              top: circleSize / 2 - 0.5,
+              width: circleGap + 2,
+              height: 1,
+              child: Container(color: color),
+            ),
+          // 圆圈
+          for (int i = 0; i < n; i++)
+            Positioned(
+              left: i * (circleSize + circleGap),
+              top: 0,
+              width: circleSize,
+              height: circleSize,
+              child: Container(
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  emoKeywords[emotionIndexes[i]][0], // 首关键词
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class TrendView extends GetView<TrendCtrl> {
   TrendView({super.key});
   @override
@@ -156,6 +373,11 @@ class TrendCtrl extends GetxController {
 
   /// 时间轴组缓冲：4 次 trend() 凑成一组，满了就推入 [emotionGroups] 并清空。
   final List<int> _pendingGroup = [];
+
+  /// 4 正转折时刻（每条 4 个正向情绪构成完整组）。
+  /// 在 trend() 中检测完整组后追加；详情面板按顺序罗列。
+  /// 该列表只增不减（除非 [init] 清空），便于治未/顾客回看每个重要转折点。
+  final RxList<TurningPoint> turningPoints = <TurningPoint>[].obs;
 
   /// 根据 5 个频段趋势方向累加 emoValues，并通知 AI 对话。
   ///
@@ -196,8 +418,23 @@ class TrendCtrl extends GetxController {
     // 时间轴：累入缓冲，4 个一组。
     _pendingGroup.add(idx);
     if (_pendingGroup.length >= 4) {
-      emotionGroups.add(List<int>.from(_pendingGroup));
+      final completedGroup = List<int>.from(_pendingGroup);
+      emotionGroups.add(completedGroup);
       _pendingGroup.clear();
+
+      // 转正时刻检测：完整一组里 3 个或 4 个为正向时记录。
+      // 老张 2026-07-04 决定放宽到 3 正（原 4 正太严苛，转正时刻难以出现）。
+      // 2 正及以下不记录（仍包含过多负向，不足以构成"转正"信号）。
+      final posCount = completedGroup.where((i) => _positiveEmotionIndexes.contains(i)).length;
+      if (posCount >= 3) {
+        turningPoints.add(
+          TurningPoint(
+            minute: emotionGroups.length,
+            emotions: completedGroup,
+            posCount: posCount,
+          ),
+        );
+      }
     }
   }
 
@@ -207,6 +444,7 @@ class TrendCtrl extends GetxController {
     }
     emotionGroups.clear();
     _pendingGroup.clear();
+    turningPoints.clear();
   }
 }
 
@@ -258,9 +496,10 @@ class EmoValue extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           const MyTextP2("情绪疗愈“时刻表”"),
-          MyTextP3("（一个刻度约等于1分钟的情绪数据）", colorPrimaryContainer),
+          MyTextP3("（刻度单位：分钟）", colorPrimaryContainer),
           const _EmotionTimeline(),
-          MyTextP3("蓝色为正向收益转折点、橙色为负向克制转折点", colorPrimaryContainer),
+          const SizedBox(height: 20),
+          const _TurningPointDetail(),
           const SizedBox(height: 20),
         ],
       ),
@@ -572,10 +811,14 @@ class _EmotionTimeline extends StatelessWidget {
           // 空状态：让 SizedBox 宽度 = 父级可用宽度（横贯整个屏幕，提示"等待数据"）
           // 有数据：按 tick 数计算宽度，溢出时 SingleChildScrollView 横向滚动
           final double width;
+          final int emptyDotCount;
           if (groups.isEmpty) {
             width = constraints.maxWidth;
+            // 初始状态灰色圆点数：按父级宽自适应，每个 tickWidth 间距 1 个
+            emptyDotCount = (constraints.maxWidth / _tickWidth).floor().clamp(1, 999);
           } else {
             width = (groups.length * _tickWidth).clamp(_tickWidth, double.infinity).toDouble();
+            emptyDotCount = 0;
           }
           return SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -595,7 +838,23 @@ class _EmotionTimeline extends StatelessWidget {
                       painter: _AxisLinePainter(),
                     ),
                   ),
-                  // 2. 每个刻度：Positioned 绝对定位（空状态时不渲染）
+                  // 2. 空状态灰色预备圆点：让用户一眼认出"这是时间轴"
+                  // 圆点 8×8、灰色、等距分布在轴线上；
+                  // 与真实 tick 等距（保持视觉连贯：等有数据圆点变 tick 时布局一致）
+                  for (int i = 0; i < emptyDotCount; i++)
+                    Positioned(
+                      left: i * _tickWidth + (_tickWidth - 8) / 2,
+                      top: _axisY - 4,
+                      width: 8,
+                      height: 8,
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFBDBDBD),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                  // 3. 每个刻度：Positioned 绝对定位（空状态时不渲染）
                   for (int i = 0; i < groups.length; i++)
                     Positioned(
                       left: i * _tickWidth,
