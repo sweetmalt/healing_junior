@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:just_audio/just_audio.dart';
 
 /// ============================================================
 /// 阶段枚举
@@ -12,6 +13,133 @@ enum CardohPhase {
   shuffling, // 洗牌动画
   fan, // 扇形浏览/抽卡
   viewing, // 查看已抽卡
+}
+
+/// ============================================================
+/// 音效服务（滑动节流咔哒 + 抽卡嗖）
+/// ============================================================
+class CardohAudio {
+  // 资源路径（wav 格式，无压缩短音效解码快）
+  static const String _clackPath = 'assets/audios/clack.wav';
+  static const String _whooshPath = 'assets/audios/whoosh.wav';
+
+  // 用 2 个独立 AudioPlayer，避免滑动节流和抽卡嗖互相打断
+  final AudioPlayer _clackPlayer = AudioPlayer();
+  final AudioPlayer _whooshPlayer = AudioPlayer();
+
+  // 资源是否已加载（关键：避免滑动中重复 setAsset 触发 Loading interrupted）
+  bool _clackLoaded = false;
+  bool _whooshLoaded = false;
+
+  // ===== 滑动节流参数（开放手脚调过的版本）=====
+  // 主阈值：累积到此角度就咔哒一次（更敏感，约 7.5° ≈ 88 张卡每 2 张一次）
+  static const double _clackAngleStep = pi / 24;
+
+  // 抬手补播阈值：累积到此角度（即使没到主阈值），抬手时也补一次咔哒
+  static const double _clackEndAngleThreshold = pi / 36; // 约 5°
+
+  // 时间窗：上一次咔哒后，短时间内不再触发（防止极快连刷）
+  static const Duration _clackMinInterval = Duration(milliseconds: 80);
+
+  // 状态
+  double _clackAccumulatedAngle = 0.0;
+  DateTime _lastClackAt = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// 滑动时调用：传入本次旋转角度增量（弧度），内部做累加节流
+  void onFanSwipe(double deltaAngle) {
+    _clackAccumulatedAngle += deltaAngle.abs();
+    if (_clackAccumulatedAngle >= _clackAngleStep) {
+      _clackAccumulatedAngle = 0.0;
+      _triggerClack();
+    }
+  }
+
+  /// 滑动结束时调用：累积够了就补一次，然后清零
+  void onFanSwipeEnd() {
+    if (_clackAccumulatedAngle >= _clackEndAngleThreshold) {
+      _clackAccumulatedAngle = 0.0;
+      _triggerClack();
+    } else {
+      _clackAccumulatedAngle = 0.0;
+    }
+  }
+
+  void _triggerClack() {
+    final now = DateTime.now();
+    if (now.difference(_lastClackAt) < _clackMinInterval) return;
+    _lastClackAt = now;
+    debugPrint('[Clack] _triggerClack');
+    _playClack();
+  }
+
+  /// 抽卡时调用（点击/上滑走同一路径）
+  void onDrawCard() {
+    debugPrint('[Whoosh] onDrawCard');
+    _playWhoosh();
+  }
+
+  // ===== 关键修复：首次 setAsset，后续只 seek(0) + play() =====
+  // just_audio 的 setAsset 是异步的，连续触发会被打断报 "Loading interrupted"。
+  // 短音效场景下，预加载一次资产，后续每次只 seek+play，零中断。
+
+  Future<void> _playClack() async {
+    try {
+      debugPrint('[Clack] _playClack entry, loaded=$_clackLoaded');
+      if (!_clackLoaded) {
+        debugPrint('[Clack] first time setAsset');
+        await _clackPlayer.setAsset(_clackPath);
+        await _clackPlayer.setVolume(0.5);
+        _clackLoaded = true;
+        debugPrint('[Clack] setAsset done');
+      }
+      await _clackPlayer.seek(Duration.zero);
+      debugPrint('[Clack] seek done, calling play()');
+      await _clackPlayer.play();
+      debugPrint('[Clack] play() done');
+    } catch (e, st) {
+      debugPrint('[Clack] ERROR: $e\n$st');
+    }
+  }
+
+  Future<void> _playWhoosh() async {
+    try {
+      debugPrint('[Whoosh] _playWhoosh entry, loaded=$_whooshLoaded');
+      if (!_whooshLoaded) {
+        await _whooshPlayer.setAsset(_whooshPath);
+        await _whooshPlayer.setVolume(0.5);
+        _whooshLoaded = true;
+      }
+      await _whooshPlayer.seek(Duration.zero);
+      await _whooshPlayer.play();
+    } catch (e, st) {
+      debugPrint('[Whoosh] ERROR: $e\n$st');
+    }
+  }
+
+  /// 预加载音频资源（建议在控制器初始化时调用，避免滑动中首次 setAsset 被自己打断）
+  Future<void> preload() async {
+    try {
+      debugPrint('[CardohAudio] preload start');
+      await Future.wait([
+        _clackPlayer.setAsset(_clackPath).then((_) {
+          _clackPlayer.setVolume(0.5);
+          _clackLoaded = true;
+        }),
+        _whooshPlayer.setAsset(_whooshPath).then((_) {
+          _whooshPlayer.setVolume(0.5);
+          _whooshLoaded = true;
+        }),
+      ]);
+      debugPrint('[CardohAudio] preload done');
+    } catch (e, st) {
+      debugPrint('[CardohAudio] preload ERROR: $e\n$st');
+    }
+  }
+
+  void dispose() {
+    _clackPlayer.dispose();
+    _whooshPlayer.dispose();
+  }
 }
 
 /// ============================================================
@@ -35,11 +163,23 @@ class CardohCtrl extends GetxController {
     super.onInit();
     // 预加载卡背图片
     loadCardBackImage();
+    // 预加载音效资源（避免滑动中首次 setAsset 被自己打断）
+    _audio.preload();
     // 首次进入默认选择基础卡
     selectedDeck.value = 1;
     // 初始化基础卡数据
     selectDeck(1);
   }
+
+  @override
+  void onClose() {
+    _audio.dispose();
+    super.onClose();
+  }
+
+  // ==================== 音效服务 ====================
+  final CardohAudio _audio = CardohAudio();
+  CardohAudio get audio => _audio;
 
   // ==================== 统一数据结构 ====================
 
@@ -260,6 +400,9 @@ class CardohCtrl extends GetxController {
     if (isFlying.value) return;
     if (remainingCards.isEmpty) return;
     if (!remainingCards.contains(cardId)) return; // 确保这张卡还在剩余卡里
+
+    // 抽卡音效（点击/上滑走同一路径）
+    _audio.onDrawCard();
 
     // 四卡连抽模式：为下一个空槽位抽卡（按顺序：当下0→卡点1→突破2→理想3）
     if (fourDrawMode.value) {
@@ -1557,6 +1700,9 @@ class _FanCardViewState extends State<_FanCardView> with SingleTickerProviderSta
   double _lastAngle = 0.0;
   bool _isDragging = false;
 
+  // 上滑抽卡：手势起点位置（用于 onPanEnd 判定方向）
+  Offset _panStartPos = Offset.zero;
+
   @override
   void initState() {
     super.initState();
@@ -1580,6 +1726,61 @@ class _FanCardViewState extends State<_FanCardView> with SingleTickerProviderSta
     final dx = globalPosition.dx - circleCenter.dx;
     final dy = globalPosition.dy - circleCenter.dy;
     return atan2(dy, dx);
+  }
+
+  // ==================== 上滑抽卡工具方法 ====================
+  // 复用与 _buildCircleView 渲染层完全一致的圆环坐标公式，
+  // 确保上滑选中那张卡的飞行起点与点击那一张的视觉位置一致。
+
+  /// 给定 cardId 返回它在屏幕上的中心坐标
+  Offset _getCardCenter(int cardId) {
+    final allCards = widget.controller.fanDisplayCards;
+    final i = allCards.indexOf(cardId);
+    if (i < 0) return Offset.zero;
+    final screenW = MediaQuery.of(context).size.width;
+    final circleCenterY = widget.controller.fanCircleCenterY;
+    final baseAngle = (2 * pi * i / allCards.length) - pi / 2;
+    final angle = baseAngle + widget.controller.circleRotation.value;
+    final scale = widget.controller.savedScale;
+    final x = screenW / 2 + cos(angle) * scale;
+    final y = circleCenterY + sin(angle) * scale;
+    return Offset(x, y);
+  }
+
+  /// 给定 cardId 返回它的旋转角度（指向圆心）
+  double _getCardRotation(int cardId) {
+    final allCards = widget.controller.fanDisplayCards;
+    final i = allCards.indexOf(cardId);
+    if (i < 0) return 0.0;
+    final baseAngle = (2 * pi * i / allCards.length) - pi / 2;
+    final angle = baseAngle + widget.controller.circleRotation.value;
+    return angle + pi / 2;
+  }
+
+  /// 上滑抽卡选卡：触摸起点 → 圆环上每张未抽卡的中心 → 欧氏距离最近
+  int? _findNearestCardAt(Offset globalPos) {
+    final allCards = widget.controller.fanDisplayCards;
+    final remaining = widget.controller.remainingCards;
+    final screenW = MediaQuery.of(context).size.width;
+    final circleCenterY = widget.controller.fanCircleCenterY;
+
+    int? nearest;
+    double minDist = double.infinity;
+    for (int i = 0; i < allCards.length; i++) {
+      final cardId = allCards[i];
+      if (!remaining.contains(cardId)) continue;
+      final baseAngle = (2 * pi * i / allCards.length) - pi / 2;
+      final angle = baseAngle + widget.controller.circleRotation.value;
+      final scale = widget.controller.savedScale;
+      final x = screenW / 2 + cos(angle) * scale;
+      final y = circleCenterY + sin(angle) * scale;
+      final dist = (Offset(x, y) - globalPos).distance;
+      if (dist < minDist) {
+        minDist = dist;
+        nearest = cardId;
+      }
+    }
+    return nearest;
   }
 
   @override
@@ -1615,6 +1816,8 @@ class _FanCardViewState extends State<_FanCardView> with SingleTickerProviderSta
         final circleCenter = Offset(screenW / 2, circleCenterY);
         _lastAngle = _computeAngle(globalPos, circleCenter);
         _isDragging = true;
+        // 上滑抽卡：记录手势起点（用于 onPanEnd 判定方向）
+        _panStartPos = globalPos;
       },
       onPanUpdate: (details) {
         if (!_isDragging) return;
@@ -1622,11 +1825,33 @@ class _FanCardViewState extends State<_FanCardView> with SingleTickerProviderSta
         final circleCenter = Offset(screenW / 2, circleCenterY);
         final currentAngle = _computeAngle(globalPos, circleCenter);
         final delta = currentAngle - _lastAngle;
+        final beforeRotation = controller.circleRotation.value;
         controller.circleRotation.value += delta;
         _lastAngle = currentAngle;
+        // 滑动节流音效
+        controller.audio.onFanSwipe(controller.circleRotation.value - beforeRotation);
       },
-      onPanEnd: (_) {
+      onPanEnd: (details) {
         _isDragging = false;
+        controller.audio.onFanSwipeEnd();
+
+        // 上滑抽卡判定：垂直位移 > 80 且 水平位移 < 60
+        final endPos = details.globalPosition;
+        final dy = endPos.dy - _panStartPos.dy; // 向上为负
+        final dx = (endPos.dx - _panStartPos.dx).abs();
+        if (-dy > 80 && dx < 60) {
+          if (!controller.isFlying.value) {
+            // 上滑抽卡与点击抽卡共享同一入口 onFanCardTap，
+            // 单卡/四连抽模式自动复用已有抽卡逻辑（无需特例分支）
+            final cardId = _findNearestCardAt(_panStartPos);
+            if (cardId != null) {
+              // 复用与点击完全相同的抽卡入口（位置/旋转按真实圆环坐标计算）
+              final cardPos = _getCardCenter(cardId);
+              final rotation = _getCardRotation(cardId);
+              controller.onFanCardTap(cardId, cardPos, cardRotation: rotation);
+            }
+          }
+        }
       },
       child: Stack(
         children: [
