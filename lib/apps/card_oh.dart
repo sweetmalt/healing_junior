@@ -201,11 +201,11 @@ class CardohCtrl extends GetxController {
   /// 飞行起点位置列表（每张卡一个起点）
   final flyStartPositions = <Offset>[].obs;
 
-  /// 飞行起点旋转角度列表（每张卡一个角度，单位：弧度）
-  final flyStartRotations = <double>[].obs;
-
   /// 当前阶段
   final phase = CardohPhase.select.obs;
+
+  /// 飞行起点的卡牌旋转角（弧度），由飞行代码读，飞行结束后清零
+  final flyStartRotation = 0.0.obs;
 
   /// 是否包含39/40/41特殊卡（仅基础卡有效，默认false）
   final includeSpecial = false.obs;
@@ -429,9 +429,8 @@ class CardohCtrl extends GetxController {
       flyStartPositions.clear();
       flyStartPositions.add(cardCenter);
 
-      // 记录飞行起点旋转角度
-      flyStartRotations.clear();
-      flyStartRotations.add(cardRotation ?? 0.0);
+      // 记录飞行起点旋转角度（卡在扇形牌堆上的姿态）
+      flyStartRotation.value = cardRotation ?? 0.0;
 
       // 记录目标槽位
       currentFlyToSlot.value = nextSlot;
@@ -447,9 +446,8 @@ class CardohCtrl extends GetxController {
     flyStartPositions.clear();
     flyStartPositions.add(cardCenter);
 
-    // 记录飞行起点旋转角度
-    flyStartRotations.clear();
-    flyStartRotations.add(cardRotation ?? 0.0);
+    // 记录飞行起点旋转角度（卡在扇形牌堆上的姿态）
+    flyStartRotation.value = cardRotation ?? 0.0;
 
     // 设置当前卡（用于飞行动画显示）
     currentCards.value = [cardId];
@@ -2206,32 +2204,42 @@ class _FlyingCardsViewState extends State<_FlyingCardsView> with SingleTickerPro
           final scale = cardCount == 1 ? (1.0 + 0.5 * eased) : 1.0;
 
           // 翻牌动画：在飞行后期进行（当 eased > 0.6 时开始翻）
-          final flipProgress = ((eased - 0.6) / 0.4).clamp(0.0, 1.0);
+          // 用 easeInOut 曲线让翻牌更自然
+          final rawFlip = ((eased - 0.6) / 0.4).clamp(0.0, 1.0);
+          final flipProgress = Curves.easeInOut.transform(rawFlip);
 
-          // 旋转动画：从初始角度过渡到0度
-          final startRotation = index < widget.controller.flyStartRotations.length
-              ? widget.controller.flyStartRotations[index]
+          // 姿态：飞行阶段保持圆环上的初始角度，最后 20% 过渡到 0（落位时是水平的）
+          final startRotation = index == 0
+              ? widget.controller.flyStartRotation.value
               : 0.0;
-          final rotation = startRotation * (1.0 - eased);
+          final initialRotation = _easeOutRotation(startRotation, eased);
 
           return Positioned(
             left: x,
             top: y,
             child: Transform.scale(
               scale: scale,
-              child: Transform.rotate(
-                angle: rotation,
-                child: _FlyingCard(
-                  cardId: cards[index],
-                  deckType: deckType,
-                  flipProgress: flipProgress,
-                ),
+              child: _FlyingCard(
+                cardId: cards[index],
+                deckType: deckType,
+                flipProgress: flipProgress,
+                initialRotation: initialRotation,
               ),
             ),
           );
         }),
       );
     });
+  }
+
+  /// 飞行阶段姿态过渡：
+  /// - eased < 0.8：保持初始旋转角（卡在扇形上的姿态）
+  /// - eased 0.8 → 1.0：从初始角线性过渡到 0（让卡在落位时是水平的）
+  /// 这样翻面开始前卡已经端正，翻面只做单纯的 rotateY，不会"抽搐"
+  static double _easeOutRotation(double startRotation, double eased) {
+    if (eased < 0.8) return startRotation;
+    final t = (eased - 0.8) / 0.2;
+    return startRotation * (1.0 - t);
   }
 
   /// 构建四槽按钮界面
@@ -2322,24 +2330,22 @@ class _FlyingCardsViewState extends State<_FlyingCardsView> with SingleTickerPro
             final eased = Curves.easeOut.transform(flyProgress);
             final x = startLeft + (targetLeft - startLeft) * eased;
             final y = startTop + (targetTop - startTop) * eased;
-            // 翻牌动画
-            final flipProgress = ((eased - 0.6) / 0.4).clamp(0.0, 1.0);
-            // 旋转动画：从初始角度过渡到0度
-            final startRotation = widget.controller.flyStartRotations.isNotEmpty
-                ? widget.controller.flyStartRotations.first
-                : 0.0;
-            final rotation = startRotation * (1.0 - eased);
+            // 翻牌动画：使用 easeInOut 曲线，让翻牌过程更自然
+            final rawFlip = ((eased - 0.6) / 0.4).clamp(0.0, 1.0);
+            final flipProgress = Curves.easeInOut.transform(rawFlip);
+
+            // 姿态：飞行阶段保持，最后 20% 过渡到 0
+            final startRotation = widget.controller.flyStartRotation.value;
+            final initialRotation = _easeOutRotation(startRotation, eased);
 
             return Positioned(
               left: x,
               top: y,
-              child: Transform.rotate(
-                angle: rotation,
-                child: _FlyingCard(
-                  cardId: flyingCardId,
-                  deckType: deckType,
-                  flipProgress: flipProgress,
-                ),
+              child: _FlyingCard(
+                cardId: flyingCardId,
+                deckType: deckType,
+                flipProgress: flipProgress,
+                initialRotation: initialRotation,
               ),
             );
           }
@@ -2420,15 +2426,22 @@ class _FlyingCardsViewState extends State<_FlyingCardsView> with SingleTickerPro
 }
 
 /// 飞行中的单张卡（带翻牌动画）
+///
+/// 动画分两个独立阶段，由调用方传入两个参数驱动：
+/// - [flipProgress]  0.0=背面 → 1.0=正面，绕 Y 轴翻牌（落位后才推进）
+/// - [initialRotation]  卡在扇形牌堆上的初始姿态（弧度）
+///                     飞行阶段保持；落位前过渡到 0，使卡端正后再翻面
 class _FlyingCard extends StatefulWidget {
   final int cardId;
   final int deckType;
   final double flipProgress; // 0.0=背面, 1.0=正面
+  final double initialRotation; // 飞行阶段保持的初始旋转（弧度）
 
   const _FlyingCard({
     required this.cardId,
     required this.deckType,
     this.flipProgress = 0.0,
+    this.initialRotation = 0.0,
   });
 
   @override
@@ -2438,48 +2451,49 @@ class _FlyingCard extends StatefulWidget {
 class _FlyingCardState extends State<_FlyingCard> {
   @override
   Widget build(BuildContext context) {
-    // 3D翻牌效果
-    final angle = widget.flipProgress * pi;
-    final transform = Matrix4.identity()
-      ..setEntry(3, 2, 0.001) // perspective
-      ..rotateY(angle);
-
-    // 根据角度判断显示哪一面
+    // 两件事干净分离：
+    // 1) 外层 Transform.rotate：保持卡在扇形上的初始姿态
+    // 2) 内层 Transform.rotateY：单纯翻牌，绕 Y 轴 0 → π
     final showFront = widget.flipProgress > 0.5;
 
-    return Transform(
-      transform: transform,
-      alignment: Alignment.center,
-      child: Container(
-        width: CardohCtrl.fanCardW,
-        height: CardohCtrl.fanCardH,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.4),
-              blurRadius: 20,
-              offset: const Offset(5, 10),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: showFront
-              ? Image.asset(
-                  'assets/images/card_oh/${widget.deckType}/${widget.cardId.toString().padLeft(2, '0')}.jpg',
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    color: Colors.grey[400],
-                    child: Center(
-                      child: Text(
-                        widget.cardId.toString(),
-                        style: const TextStyle(color: Colors.white, fontSize: 24),
+    return Transform.rotate(
+      angle: widget.initialRotation,
+      child: Transform(
+        transform: Matrix4.identity()
+          ..setEntry(3, 2, 0.001) // perspective
+          ..rotateY(widget.flipProgress * pi),
+        alignment: Alignment.center,
+        child: Container(
+          width: CardohCtrl.fanCardW,
+          height: CardohCtrl.fanCardH,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.4),
+                blurRadius: 20,
+                offset: const Offset(5, 10),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: showFront
+                ? Image.asset(
+                    'assets/images/card_oh/${widget.deckType}/${widget.cardId.toString().padLeft(2, '0')}.jpg',
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                      color: Colors.grey[400],
+                      child: Center(
+                        child: Text(
+                          widget.cardId.toString(),
+                          style: const TextStyle(color: Colors.white, fontSize: 24),
+                        ),
                       ),
                     ),
-                  ),
-                )
-              : _buildCardBack(),
+                  )
+                : _buildCardBack(),
+          ),
         ),
       ),
     );
