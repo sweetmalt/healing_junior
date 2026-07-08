@@ -68,13 +68,11 @@ class CardohAudio {
     final now = DateTime.now();
     if (now.difference(_lastClackAt) < _clackMinInterval) return;
     _lastClackAt = now;
-    debugPrint('[Clack] _triggerClack');
     _playClack();
   }
 
   /// 抽卡时调用（点击/上滑走同一路径）
   void onDrawCard() {
-    debugPrint('[Whoosh] onDrawCard');
     _playWhoosh();
   }
 
@@ -84,26 +82,20 @@ class CardohAudio {
 
   Future<void> _playClack() async {
     try {
-      debugPrint('[Clack] _playClack entry, loaded=$_clackLoaded');
       if (!_clackLoaded) {
-        debugPrint('[Clack] first time setAsset');
         await _clackPlayer.setAsset(_clackPath);
         await _clackPlayer.setVolume(0.5);
         _clackLoaded = true;
-        debugPrint('[Clack] setAsset done');
       }
       await _clackPlayer.seek(Duration.zero);
-      debugPrint('[Clack] seek done, calling play()');
       await _clackPlayer.play();
-      debugPrint('[Clack] play() done');
-    } catch (e, st) {
-      debugPrint('[Clack] ERROR: $e\n$st');
+    } catch (_) {
+      // 静默吞错：音效失败不影响主流程（滑动 / 抽卡仍能工作）
     }
   }
 
   Future<void> _playWhoosh() async {
     try {
-      debugPrint('[Whoosh] _playWhoosh entry, loaded=$_whooshLoaded');
       if (!_whooshLoaded) {
         await _whooshPlayer.setAsset(_whooshPath);
         await _whooshPlayer.setVolume(0.5);
@@ -111,15 +103,14 @@ class CardohAudio {
       }
       await _whooshPlayer.seek(Duration.zero);
       await _whooshPlayer.play();
-    } catch (e, st) {
-      debugPrint('[Whoosh] ERROR: $e\n$st');
+    } catch (_) {
+      // 静默吞错：音效失败不影响主流程
     }
   }
 
   /// 预加载音频资源（建议在控制器初始化时调用，避免滑动中首次 setAsset 被自己打断）
   Future<void> preload() async {
     try {
-      debugPrint('[CardohAudio] preload start');
       await Future.wait([
         _clackPlayer.setAsset(_clackPath).then((_) {
           _clackPlayer.setVolume(0.5);
@@ -130,9 +121,8 @@ class CardohAudio {
           _whooshLoaded = true;
         }),
       ]);
-      debugPrint('[CardohAudio] preload done');
-    } catch (e, st) {
-      debugPrint('[CardohAudio] preload ERROR: $e\n$st');
+    } catch (_) {
+      // 静默吞错：预加载失败则首次播放会兜底 setAsset
     }
   }
 
@@ -430,7 +420,8 @@ class CardohCtrl extends GetxController {
       flyStartPositions.add(cardCenter);
 
       // 记录飞行起点旋转角度（卡在扇形牌堆上的姿态）
-      flyStartRotation.value = cardRotation ?? 0.0;
+      // 规范化到 [-π, +π] 避免 _easeOutRotation 走大弧形路径（视觉上像"旋转"而非"翻牌"）
+      flyStartRotation.value = _FlyingCardsView.normalizeAngle(cardRotation ?? 0.0);
 
       // 记录目标槽位
       currentFlyToSlot.value = nextSlot;
@@ -447,7 +438,8 @@ class CardohCtrl extends GetxController {
     flyStartPositions.add(cardCenter);
 
     // 记录飞行起点旋转角度（卡在扇形牌堆上的姿态）
-    flyStartRotation.value = cardRotation ?? 0.0;
+    // 规范化到 [-π, +π] 避免 _easeOutRotation 走大弧形路径（视觉上像"旋转"而非"翻牌"）
+    flyStartRotation.value = _FlyingCardsView.normalizeAngle(cardRotation ?? 0.0);
 
     // 设置当前卡（用于飞行动画显示）
     currentCards.value = [cardId];
@@ -2067,6 +2059,20 @@ class _FlyingCardsView extends StatefulWidget {
   final CardohCtrl controller;
 
   const _FlyingCardsView({required this.controller});
+
+  /// 把任意弧度值规范化到 [-π, +π] 区间。
+  ///
+  /// 背景：用户在圆环上滑动后，卡的初始旋转角可能是 326°（= 5.69 rad）。
+  /// 直接用这个值做线性插值（5.69 → 0），中间会"转" 326° 大弧——视觉上像旋转。
+  /// 规范化到 [-33.9°, +33.9°] 后，插值走短路径，视觉上只是"轻轻摆正"。
+  /// 等价的几何意义：旋转 326° 和旋转 -34° 的视觉效果一致。
+  static double normalizeAngle(double angle) {
+    const twoPi = 2 * pi;
+    var v = angle % twoPi;
+    if (v > pi) v -= twoPi;
+    if (v < -pi) v += twoPi;
+    return v;
+  }
 
   @override
   State<_FlyingCardsView> createState() => _FlyingCardsViewState();
