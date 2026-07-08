@@ -1811,6 +1811,8 @@ class _FanCardViewState extends State<_FanCardView> with SingleTickerProviderSta
       },
       onPanUpdate: (details) {
         if (!_isDragging) return;
+        // 空堆守卫：牌组已抽完时禁止咔哒声（圆环仍可转动让用户环顾空圈）
+        if (controller.remainingCards.isEmpty) return;
         final globalPos = details.globalPosition;
         final circleCenter = Offset(screenW / 2, circleCenterY);
         final currentAngle = _computeAngle(globalPos, circleCenter);
@@ -1823,6 +1825,8 @@ class _FanCardViewState extends State<_FanCardView> with SingleTickerProviderSta
       },
       onPanEnd: (details) {
         _isDragging = false;
+        // 空堆守卫：抬手补播同样要静默
+        if (controller.remainingCards.isEmpty) return;
         controller.audio.onFanSwipeEnd();
 
         // 上滑抽卡判定：垂直位移 > 80 且 水平位移 < 60
