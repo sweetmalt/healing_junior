@@ -10,6 +10,7 @@ import 'package:healing_junior/apps/bci.dart';
 import 'package:healing_junior/apps/brain_load.dart';
 import 'package:healing_junior/apps/customer.dart';
 import 'package:healing_junior/apps/draw.dart';
+import 'package:healing_junior/apps/draw_mandala.dart';
 import 'package:healing_junior/apps/pressure.dart';
 import 'package:healing_junior/apps/qing_zhi.dart';
 import 'package:healing_junior/apps/resting.dart';
@@ -26,7 +27,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
 class MyCtrl extends GetxController {
-  final List<GlobalKey> expansionKeys = List.generate(17, (i) => GlobalKey(debugLabel: 'expansion_$i'));
+  final List<GlobalKey> expansionKeys = List.generate(18, (i) => GlobalKey(debugLabel: 'expansion_$i'));
   Future<void> shareReport(String type, int timestamp) async {
     Get.defaultDialog(
       title: '分享报告',
@@ -138,6 +139,7 @@ class MyCtrl extends GetxController {
   final restingCtrl = Get.put(RestingCtrl());
   final brainLoadCtrl = Get.put(BrainLoadCtrl());
   final drawCtrl = Get.put(DrawCtrl());
+  final drawMandalaCtrl = Get.put(DrawMandalaCtrl());
   final trendCtrl = Get.put(TrendCtrl());
   final qingzhiCtrl = Get.put(QingZhiCtrl());
   final pressureCtrl = Get.put(PressureCtrl());
@@ -358,6 +360,12 @@ class MyCtrl extends GetxController {
     drawCtrl.flu.value = (drawCtrl.att.value / 2 + drawCtrl.med.value / 2).toInt();
     drawCtrl.hap.value = 100 - (pressureCtrl.psyPresssure.value * 100).toInt();
     drawCtrl.isReady.value = true;
+    drawMandalaCtrl.att.value = Data.calculateMV(bciDataAtt).toInt();
+    drawMandalaCtrl.med.value = Data.calculateMV(bciDataMed).toInt();
+    drawMandalaCtrl.rel.value = ((100 - drawMandalaCtrl.att.value) / 2 + drawMandalaCtrl.med.value / 2).toInt();
+    drawMandalaCtrl.flu.value = (drawMandalaCtrl.att.value / 2 + drawMandalaCtrl.med.value / 2).toInt();
+    drawMandalaCtrl.hap.value = 100 - (pressureCtrl.psyPresssure.value * 100).toInt();
+    drawMandalaCtrl.isReady.value = true;
     customerCtrl.setSampleData({
       "delta": bciDataDelta,
       "theta": bciDataTheta,
@@ -385,6 +393,7 @@ class MyCtrl extends GetxController {
     baselineCtrl.init();
     brainLoadCtrl.init();
     drawCtrl.init();
+    drawMandalaCtrl.init();
     trendCtrl.init();
     qingzhiCtrl.init();
   }

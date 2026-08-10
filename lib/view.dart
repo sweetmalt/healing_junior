@@ -7,6 +7,7 @@ import 'package:healing_junior/apps/bci.dart';
 import 'package:healing_junior/apps/brain_load.dart';
 import 'package:healing_junior/apps/customer.dart';
 import 'package:healing_junior/apps/draw.dart';
+import 'package:healing_junior/apps/draw_mandala.dart';
 import 'package:healing_junior/apps/employee.dart';
 // import 'package:healing_junior/apps/heart_rate.dart';
 // import 'package:healing_junior/apps/hrv.dart';
@@ -365,6 +366,23 @@ class MyView extends GetView<MyCtrl> {
                 child: RepaintBoundary(
                   key: controller.expansionKeys[14],
                   child: ExpansionTile(
+                    leading: Icon(Icons.color_lens_rounded),
+                    collapsedShape: Border(top: BorderSide(color: colorSurface)),
+                    shape: Border(top: BorderSide(color: colorSurface)),
+                    title: MyTextP1("情绪画像 - 曼陀罗"),
+                    subtitle: MyTextP3("让AI用图像色彩尝试表达当下心境", colorPrimaryContainer),
+                    children: [
+                      DrawMandalaView(),
+                    ],
+                  ),
+                ),
+              ),
+              Visibility(
+                visible: settingCtrl.states[15],
+                replacement: const SizedBox(height: 0),
+                child: RepaintBoundary(
+                  key: controller.expansionKeys[15],
+                  child: ExpansionTile(
                     leading: Icon(Icons.music_note_rounded),
                     collapsedShape: Border(top: BorderSide(color: colorSurface)),
                     shape: Border(top: BorderSide(color: colorSurface)),
@@ -388,10 +406,10 @@ class MyView extends GetView<MyCtrl> {
                 ),
               ),
               Visibility(
-                visible: settingCtrl.states[15],
+                visible: settingCtrl.states[16],
                 replacement: const SizedBox(height: 0),
                 child: RepaintBoundary(
-                  key: controller.expansionKeys[15],
+                  key: controller.expansionKeys[16],
                   child: ExpansionTile(
                     leading: Icon(Icons.music_note_rounded),
                     collapsedShape: Border(top: BorderSide(color: colorSurface)),
@@ -407,7 +425,7 @@ class MyView extends GetView<MyCtrl> {
                 ),
               ),
               RepaintBoundary(
-                key: controller.expansionKeys[16],
+                key: controller.expansionKeys[17],
                 child: Container(
                   alignment: Alignment.center,
                   transformAlignment: Alignment.center,
