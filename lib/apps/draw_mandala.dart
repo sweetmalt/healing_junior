@@ -286,11 +286,11 @@ class DrawMandalaCtrl extends GetxController {
       return;
     }
     //余额不足
-    if (employeeCtrl.paymentBalance.value < 2) {
+    if (employeeCtrl.paymentBalance.value < 3) {
       Get.snackbar("请先充值", "您的账号余额不足，无法使用AI功能");
       return;
     }
-    bearer.value = await employeeCtrl.pay(2);
+    bearer.value = await employeeCtrl.pay(3);
     if (bearer.value.isEmpty) {
       Get.snackbar("异常提示", "获取coze_token失败，请稍后重试");
       return;
