@@ -328,6 +328,10 @@ class MyBluetoothService extends GetxService {
   final connectionState = BluetoothConnectionState.disconnected.obs;
   BluetoothDevice? connectedDevice;
 
+  /// 正在连接中的设备 remoteId（用于 UI 显示 loading 状态）。
+  /// 连接成功转为 connectedDevice 后会清空；连接失败也会清空。
+  final RxnString connectingDeviceId = RxnString();
+
   StreamSubscription? _scanSubscription;
   StreamSubscription? _connectionSubscription;
   final List<StreamSubscription<List<int>>> _charSubscriptions = [];
@@ -354,7 +358,7 @@ class MyBluetoothService extends GetxService {
       return;
     }
 
-    scanResults.clear();
+    // 不再清空 scanResults：保留已连接设备在列表顶部，新增设备增量加入
     try {
       await FlutterBluePlus.startScan();
 
@@ -388,7 +392,29 @@ class MyBluetoothService extends GetxService {
 
   Future<void> connectToDevice(BluetoothDevice device) async {
     stopScan();
+
+    // 切换设备：主动断开旧连接，避免依赖 SDK 隐式行为
+    if (connectedDevice != null &&
+        connectedDevice!.remoteId != device.remoteId) {
+      final old = connectedDevice!;
+      // 先清状态，避免旧设备的 disconnect 回调误把新设备的状态清掉
+      connectedDevice = null;
+      connectingDeviceId.value = null;
+      connectionState.value = BluetoothConnectionState.disconnected;
+      await _clearCharacteristicSubscriptions();
+      try {
+        await old.disconnect();
+      } catch (_) {
+        // 旧设备断开失败不影响新设备连接
+      }
+    } else if (connectedDevice?.remoteId == device.remoteId &&
+        connectionState.value == BluetoothConnectionState.connected) {
+      // 同一台设备且已连接：直接返回，不重复连接
+      return;
+    }
+
     connectedDevice = device;
+    connectingDeviceId.value = device.remoteId.str;
 
     try {
       await device.connect(license: License.nonprofit, autoConnect: false);
@@ -416,9 +442,18 @@ class MyBluetoothService extends GetxService {
           }
         }
       }
+      // 连接成功（指 discoverServices 走完、订阅通道就绪），清除 connecting 标记
+      connectingDeviceId.value = null;
     } catch (e) {
-      Get.snackbar('连接失败', e.toString());
+      // 失败：复位所有状态
+      connectingDeviceId.value = null;
+      connectedDevice = null;
       connectionState.value = BluetoothConnectionState.disconnected;
+      Get.snackbar(
+        '连接失败',
+        '${device.platformName.isNotEmpty ? device.platformName : "该设备"} 连接出错：${e.toString()}',
+        duration: const Duration(seconds: 3),
+      );
     }
   }
 
@@ -442,6 +477,7 @@ class MyBluetoothService extends GetxService {
   Future<void> disconnect() async {
     await connectedDevice?.disconnect();
     connectedDevice = null;
+    connectingDeviceId.value = null;
     connectionState.value = BluetoothConnectionState.disconnected;
     if (_connectionSubscription != null) {
       try {
@@ -456,9 +492,46 @@ class MyBluetoothService extends GetxService {
 class BluetoothController extends GetxController {
   final MyBluetoothService _bluetoothService = Get.put(MyBluetoothService());
 
+  /// 暴露 connectingDeviceId，供视图层 Obx 订阅以触发列表重建
+  RxnString get connectingDeviceId => _bluetoothService.connectingDeviceId;
+
   List<ScanResult> get devices => _bluetoothService.scanResults;
   RxBool isScanning = false.obs;
   Rx<BluetoothConnectionState> connectionState = BluetoothConnectionState.disconnected.obs;
+
+  /// 设备列表（已连接设备置顶）：保证用户随时能看到当前已连接的设备，
+  /// 即便它在扫描间隙因广播间隔未出现在结果中也会保留在首位。
+  /// UI 通过 isDeviceConnected() 自动识别该设备为已连接态并展示"已连接"标签。
+  List<ScanResult> get sortedDevices {
+    final connected = _bluetoothService.connectedDevice;
+    if (connected == null) return devices;
+    final rest = devices
+        .where((r) => r.device.remoteId != connected.remoteId)
+        .toList();
+    // 已连接设备如果在当前扫描结果里，优先用真实数据（含 RSSI/广播数据）
+    int idx = devices.indexWhere((r) => r.device.remoteId == connected.remoteId);
+    if (idx >= 0) {
+      return [devices[idx], ...rest];
+    }
+    // 否则构造最小占位项，确保已连接设备始终在列表首位可见
+    return [
+      ScanResult(
+        device: connected,
+        advertisementData: AdvertisementData(
+          advName: connected.platformName,
+          txPowerLevel: 0,
+          appearance: 0,
+          connectable: true,
+          manufacturerData: const {},
+          serviceData: const {},
+          serviceUuids: const [],
+        ),
+        rssi: 0,
+        timeStamp: DateTime.now(),
+      ),
+      ...rest,
+    ];
+  }
 
   @override
   void onInit() {
@@ -467,7 +540,38 @@ class BluetoothController extends GetxController {
     connectionState.bindStream(_bluetoothService.connectionState.stream);
   }
 
+  /// 判断给定设备是否为当前已连接设备
+  bool isDeviceConnected(BluetoothDevice device) {
+    final connected = _bluetoothService.connectedDevice;
+    if (connected == null) return false;
+    return connected.remoteId == device.remoteId &&
+        _bluetoothService.connectionState.value ==
+            BluetoothConnectionState.connected;
+  }
+
+  /// 判断给定设备是否正在连接中
+  bool isDeviceConnecting(BluetoothDevice device) {
+    return _bluetoothService.connectingDeviceId.value == device.remoteId.str;
+  }
+
+  /// 给定设备的最新信号强度（dBm），未发现返回 null
+  int? rssiOf(BluetoothDevice device) {
+    for (final r in _bluetoothService.scanResults) {
+      if (r.device.remoteId == device.remoteId) return r.rssi;
+    }
+    return null;
+  }
+
   void startScan() async {
+    // 已连接状态下扫描：给个轻提示，让用户知道已连接设备会被保留在列表顶部
+    if (_bluetoothService.connectionState.value ==
+        BluetoothConnectionState.connected) {
+      Get.snackbar(
+        '扫描中',
+        '当前已连接的设备将保留在列表顶部',
+        duration: const Duration(seconds: 2),
+      );
+    }
     isScanning.value = true;
     await _bluetoothService.startScan();
     // 扫描5秒后自动停止
@@ -567,6 +671,26 @@ class BluetoothAdmin extends StatelessWidget {
 
   BluetoothAdmin({super.key});
 
+  /// 点击列表项的统一入口：
+  /// - 已连接：直接跳 BluetoothView（"查看详情"语义）；断开走 AppBar 右侧"断开当前已连接设备"按钮
+  /// - 连接中：toast 提示，不响应
+  /// - 未连接：发起连接
+  void _onDeviceTap(
+      BluetoothDevice device, bool connected, bool connecting) {
+    final name =
+        device.platformName.isNotEmpty ? device.platformName : '该设备';
+    if (connecting) {
+      Get.snackbar('正在连接', '$name 正在连接中，请稍候…',
+          duration: const Duration(seconds: 2));
+      return;
+    }
+    if (connected) {
+      Get.to(() => BluetoothView());
+      return;
+    }
+    bluetoothCtrl.connect(device);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -625,23 +749,33 @@ class BluetoothAdmin extends StatelessWidget {
           // 设备列表
           Expanded(
             child: Obx(() {
-              if (bluetoothCtrl.devices.isEmpty) {
+              // 强制订阅以下 Rx（让列表在连接/连接中状态变化时重建）：
+              // - connectionState：连接状态变化时刷新"已连接"标签
+              // - connectingDeviceId：连接中 loading 状态
+              // - scanResults：扫描出新设备时刷新列表
+              // sortedDevices getter 间接读这些，但 Obx 不会追踪 getter 内的读取，
+              // 必须在 builder 函数体内直接 .value 才能注册依赖。
+              bluetoothCtrl.connectionState.value;
+              bluetoothCtrl.connectingDeviceId.value;
+              final list = bluetoothCtrl.sortedDevices;
+              if (list.isEmpty) {
                 return Center(
                   child: ElevatedButton(onPressed: bluetoothCtrl.startScan, child: const Text('设备列表为空，点击扫描可用设备')),
                 );
               }
               return ListView.builder(
-                itemCount: bluetoothCtrl.devices.length,
+                itemCount: list.length,
                 itemBuilder: (context, index) {
-                  final result = bluetoothCtrl.devices[index];
+                  final result = list[index];
                   final device = result.device;
-                  return ListTile(
-                    shape: LinearBorder.top(side: BorderSide(color: Colors.grey)),
-                    title: Text(device.platformName.isNotEmpty ? device.platformName : '未知设备'),
-                    subtitle: Text(device.remoteId.toString()),
-                    leading: Icon(Icons.bluetooth),
-                    trailing: Icon(Icons.navigate_next),
-                    onTap: () => bluetoothCtrl.connect(device),
+                  final connected = bluetoothCtrl.isDeviceConnected(device);
+                  final connecting = bluetoothCtrl.isDeviceConnecting(device);
+                  return _DeviceListTile(
+                    device: device,
+                    rssi: result.rssi,
+                    connected: connected,
+                    connecting: connecting,
+                    onTap: () => _onDeviceTap(device, connected, connecting),
                   );
                 },
               );
@@ -675,6 +809,170 @@ class BluetoothAdmin extends StatelessWidget {
               );
             }),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 设备列表项：根据连接状态显示不同 UI
+class _DeviceListTile extends StatelessWidget {
+  final BluetoothDevice device;
+  final int? rssi;
+  final bool connected;
+  final bool connecting;
+  final VoidCallback onTap;
+
+  const _DeviceListTile({
+    required this.device,
+    required this.rssi,
+    required this.connected,
+    required this.connecting,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final name =
+        device.platformName.isNotEmpty ? device.platformName : '未知设备';
+
+    // 信号强度档位（dBm）：-60 以上极近，-60~-75 普通，-75~-90 偏弱，-90 以下差
+    // 注意：未连接的"信号强"用深灰而非绿色，避免与"已连接"的蓝色+绿点撞色
+    String rssiLabel = '';
+    Color rssiColor = Colors.blueGrey;
+    if (rssi != null) {
+      final r = rssi!;
+      if (r >= -60) {
+        rssiLabel = '强';
+        rssiColor = Colors.blueGrey.shade700;
+      } else if (r >= -75) {
+        rssiLabel = '中';
+        rssiColor = Colors.blueGrey;
+      } else if (r >= -90) {
+        rssiLabel = '弱';
+        rssiColor = Colors.orange;
+      } else {
+        rssiLabel = '差';
+        rssiColor = Colors.red;
+      }
+    }
+
+    return ListTile(
+      shape: LinearBorder.top(side: BorderSide(color: Colors.grey)),
+      leading: _Leading(
+          connected: connected, connecting: connecting, rssiColor: rssiColor),
+      title: Text(name),
+      subtitle: Text(
+        rssi == null
+            ? device.remoteId.toString()
+            : '${device.remoteId.toString()}   ${rssi}dBm ($rssiLabel)',
+      ),
+      trailing: _Trailing(connected: connected, connecting: connecting),
+      onTap: onTap,
+    );
+  }
+}
+
+/// leading 区：根据状态显示不同图标
+class _Leading extends StatelessWidget {
+  final bool connected;
+  final bool connecting;
+  final Color rssiColor;
+  const _Leading(
+      {required this.connected,
+      required this.connecting,
+      required this.rssiColor});
+
+  @override
+  Widget build(BuildContext context) {
+    if (connecting) {
+      return const SizedBox(
+        width: 40,
+        height: 40,
+        child: Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
+    if (connected) {
+      return Stack(
+        alignment: Alignment.center,
+        children: [
+          const Icon(Icons.bluetooth, color: Colors.blue, size: 32),
+          // 右上角绿点
+          Positioned(
+            top: 2,
+            right: 2,
+            child: Container(
+              width: 10,
+              height: 10,
+              decoration: const BoxDecoration(
+                color: Colors.green,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+    return Icon(Icons.bluetooth, color: rssiColor, size: 28);
+  }
+}
+
+/// trailing 区：根据状态显示：
+/// - 已连接：绿色"已连接"标签（圆角胶囊 + 对勾）
+/// - 连接中：灰色"连接中…"文字
+/// - 未连接：轻量"连接"按钮（圆角 + 蓝色描边），明示这是一个可执行动作，
+///   避免与"右箭头"（导航到下一个页面）混淆。
+class _Trailing extends StatelessWidget {
+  final bool connected;
+  final bool connecting;
+  const _Trailing({required this.connected, required this.connecting});
+
+  @override
+  Widget build(BuildContext context) {
+    if (connecting) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 12),
+        child: Text('连接中…', style: TextStyle(color: Colors.grey)),
+      );
+    }
+    if (connected) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.green.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.green, width: 1),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: const [
+            Icon(Icons.check_circle, color: Colors.green, size: 16),
+            SizedBox(width: 4),
+            Text('已连接', style: TextStyle(color: Colors.green, fontSize: 12)),
+          ],
+        ),
+      );
+    }
+    // 未连接：圆角轻量按钮，蓝色描边文字"连接"，避免与"导航右箭头"混淆
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.blue, width: 1),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.bluetooth, color: Colors.blue, size: 14),
+          SizedBox(width: 4),
+          Text('连接', style: TextStyle(color: Colors.blue, fontSize: 12)),
         ],
       ),
     );
