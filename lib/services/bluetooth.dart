@@ -8,6 +8,8 @@ import 'package:healing_junior/services/eeg_data_model.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+/// 把 EEGDataModel 通过本地 TCP 端口广播给其他进程的本地服务
+/// （当前在 EEGController 中未启用 broadcastData，保留以备后续使用）
 class BroadcastService extends GetxService {
   static const int DEFAULT_PORT = 51886;
   ServerSocket? _server;
@@ -71,27 +73,49 @@ class BroadcastService extends GetxService {
   }
 }
 
-class TGAMParser extends GetxService {
+/// 多模头带串口协议解析器
+///
+/// 帧格式：AA 55 LEN [Payload] Checksum
+///   - AA 55: 帧头
+///   - LEN:   Payload 长度
+///   - Payload: 有效数据
+///   - Checksum = sum(Payload) & 0xFF（仅算 Payload，不含 AA 55 LEN）
+///
+/// 支持的 LEN：
+///   - 0x22 (34 字节): 融合数据包（Type = 0x01）
+///   - 0x11 (17 字节): 六轴数据包（Type = 0x02），App 不消费，解析后丢弃
+///
+/// 设计要点：
+///   - 使用状态机按字节解析，BLE 一次 read 不一定刚好一整包
+///   - LEN 不合法立即回到 WAIT_AA，避免缓冲区错位
+///   - Checksum 校验失败立即回到 WAIT_AA
+///   - 融合包解析完成后调 _publishData() 推给 EEGController
+///   - 六轴包解析完成后不入模型、不发布（App 用不到）
+class MultimodalHeadbandParser extends GetxService {
   // 状态常量
-  static const int PARSER_STATE_SYNC = 1; // 同步状态
-  static const int PARSER_STATE_SYNC_CHECK = 2; // 同步校验状态
-  static const int PARSER_STATE_PAYLOAD_LENGTH = 3; // 有效载荷长度状态
-  static const int PARSER_STATE_PAYLOAD = 4; // 有效载荷状态
-  static const int PARSER_STATE_CHKSUM = 5; // 校验和状态
+  static const int STATE_WAIT_AA = 0; // 等待帧头第一字节
+  static const int STATE_WAIT_55 = 1; // 等待帧头第二字节
+  static const int STATE_WAIT_LEN = 2; // 等待长度字节
+  static const int STATE_READ_PAYLOAD = 3; // 读取 Payload
+  static const int STATE_READ_CHECKSUM = 4; // 读取校验和
 
-  // 扩展码阈值
-  static const int MULTI_BYTE_CODE_THRESHOLD = 127;
+  // 包类型
+  static const int PACKET_TYPE_FUSION = 0x01; // 融合数据包
+  static const int PACKET_TYPE_IMU = 0x02; // 六轴数据包
+
+  // 合法的 LEN 值
+  static const int LEN_FUSION = 0x22; // 34 字节
+  static const int LEN_IMU = 0x11; // 17 字节
 
   // 状态变量
-  int _parserStatus = PARSER_STATE_SYNC; // 当前解析状态
-  int _payloadLength = 0; // 有效载荷长度
-  int _payloadBytesReceived = 0; // 已接收有效载荷字节数
-  int _payloadSum = 0; // 有效载荷字节和
-  int _checksum = 0; // 校验和
-  final List<int> _payload = List.filled(256, 0); // 有效载荷缓冲区
-  // 临时存储大包解析出的数据
+  int _state = STATE_WAIT_AA;
+  int _payloadLength = 0;
+  int _payloadBytesReceived = 0;
+  int _payloadSum = 0;
+  final List<int> _payload = List.filled(64, 0); // 最大 34 字节，留余量
   final EEGDataModel _tempModel = EEGDataModel();
 
+  /// 喂入从 BLE 通道读到的字节流
   void addBytes(List<int> bytes) {
     for (var byte in bytes) {
       _parseByte(byte);
@@ -99,247 +123,201 @@ class TGAMParser extends GetxService {
   }
 
   void _parseByte(int byte) {
-    switch (_parserStatus) {
-      case PARSER_STATE_SYNC:
-        if (byte == 0xAA) _parserStatus = PARSER_STATE_SYNC_CHECK;
+    switch (_state) {
+      case STATE_WAIT_AA:
+        if (byte == 0xAA) _state = STATE_WAIT_55;
         break;
 
-      case PARSER_STATE_SYNC_CHECK:
-        if (byte == 0xAA) {
-          _parserStatus = PARSER_STATE_PAYLOAD_LENGTH;
+      case STATE_WAIT_55:
+        if (byte == 0x55) {
+          _state = STATE_WAIT_LEN;
+        } else if (byte == 0xAA) {
+          // 兼容连续 AA 的情况（例如 AA AA 55）：保留在等 55
+          _state = STATE_WAIT_55;
         } else {
-          _parserStatus = PARSER_STATE_SYNC;
+          _state = STATE_WAIT_AA;
         }
         break;
 
-      case PARSER_STATE_PAYLOAD_LENGTH:
-        _payloadLength = byte;
-        _payloadBytesReceived = 0;
-        _payloadSum = 0;
-        _parserStatus = PARSER_STATE_PAYLOAD;
+      case STATE_WAIT_LEN:
+        // 校验 LEN 合法性：仅接受 0x22 / 0x11
+        if (byte == LEN_FUSION || byte == LEN_IMU) {
+          _payloadLength = byte;
+          _payloadBytesReceived = 0;
+          _payloadSum = 0;
+          _state = STATE_READ_PAYLOAD;
+        } else {
+          // 非法 LEN：丢弃当前帧，重新等 AA
+          _state = STATE_WAIT_AA;
+          // 如果这一字节恰好是 0xAA，下一轮会自然进入 WAIT_55
+          if (byte == 0xAA) {
+            _state = STATE_WAIT_55;
+          }
+        }
         break;
 
-      case PARSER_STATE_PAYLOAD:
+      case STATE_READ_PAYLOAD:
         _payload[_payloadBytesReceived++] = byte;
-        _payloadSum += byte;
+        _payloadSum = (_payloadSum + byte) & 0xFF; // 累加并保持 8 位
         if (_payloadBytesReceived >= _payloadLength) {
-          _parserStatus = PARSER_STATE_CHKSUM;
+          _state = STATE_READ_CHECKSUM;
         }
         break;
 
-      case PARSER_STATE_CHKSUM:
-        _checksum = byte;
-        // 校验和计算: (~payloadSum) & 0xFF
-        int computed = (~_payloadSum) & 0xFF;
-        if (computed == _checksum) {
-          // 校验成功，解析payload
+      case STATE_READ_CHECKSUM:
+        // Checksum = sum(Payload) & 0xFF
+        int computed = _payloadSum & 0xFF;
+        if (computed == (byte & 0xFF)) {
           _parsePayload(_payload.sublist(0, _payloadLength));
+        } else {
+          debugPrint('校验和错误: 期望 $computed 收到 ${byte & 0xFF}');
         }
-        _parserStatus = PARSER_STATE_SYNC;
+        _state = STATE_WAIT_AA;
         break;
     }
   }
 
+  /// 按 Payload[0] 包类型分发
   void _parsePayload(List<int> data) {
-    int i = 0;
-    while (i < data.length) {
-      int code = data[i];
-      int valueBytesLength = 1;
-
-      // 处理扩展码 (0x55 后跟多字节)
-      if (code == 0x55) {
-        // 扩展码，后面跟的字节表示实际code，且可能是多字节
-        // 简化处理：实际项目中可能需要递归解析，但TGAM文档未提及扩展码使用，暂忽略
-        i++;
-        continue;
-      }
-
-      // 判断是否为多字节值 (code > 127 表示后面的数据长度为2字节)
-      if (code > MULTI_BYTE_CODE_THRESHOLD) {
-        valueBytesLength = 2;
-      }
-
-      // 检查数据是否足够
-      if (i + valueBytesLength >= data.length) break;
-
-      // 提取值
-      int value;
-      if (valueBytesLength == 1) {
-        value = data[i + 1] & 0xFF;
-      } else {
-        // 两字节值: 高字节在前，低字节在后
-        value = (data[i + 1] << 8) | (data[i + 2] & 0xFF);
-      }
-
-      // 根据code处理
-      switch (code) {
-        case 0x02: // 信号质量
-          _tempModel.poorSignal = value;
-          break;
-        case 0x04: // 专注度
-          _tempModel.attention = value;
-          break;
-        case 0x05: // 放松度
-          _tempModel.meditation = value;
-          break;
-        case 0x80: // 原始数据 (两字节)
-          // 原始数据以小包形式出现，此处value为两字节拼接结果，需转换为有符号16位
-          int raw = value;
-          if (raw >= 32768) raw -= 65536;
-          _tempModel.rawData = raw;
-          // 单独更新原始数据，不等待大包
-          _publishData(onlyRaw: true);
-          break;
-        case 0x83:
-          int length = (i + 1 < data.length) ? data[i + 1] : 0;
-          _parseEEGPower(data, i);
-          i += 2 + length;
-          continue;
-      }
-
-      i += 1 + valueBytesLength;
+    if (data.isEmpty) return;
+    int type = data[0];
+    switch (type) {
+      case PACKET_TYPE_FUSION:
+        _parseFusionPacket(data);
+        break;
+      case PACKET_TYPE_IMU:
+        // 六轴包：App 不消费，解析后直接丢弃
+        _parseImuPacket(data);
+        break;
+      default:
+        debugPrint('未知包类型: 0x${type.toRadixString(16)}');
     }
+  }
+
+  /// 解析融合数据包（34 字节 Payload）
+  /// 字段定义见硬件协议文档 3.2 节
+  void _parseFusionPacket(List<int> data) {
+    // 长度校验
+    if (data.length != LEN_FUSION) return;
+    if (data[0] != PACKET_TYPE_FUSION) return;
+
+    int i = 0;
+    // Payload[0] = PacketType (uint8, 固定 0x01)
+    i += 1;
+    // Payload[1] = Signal (uint8)
+    _tempModel.poorSignal = data[i] & 0xFF;
+    i += 1;
+    // Payload[2-4] = Delta (uint24 大端)
+    _tempModel.delta = _readUint24BE(data, i);
+    i += 3;
+    // Payload[5-7] = Theta (uint24 大端)
+    _tempModel.theta = _readUint24BE(data, i);
+    i += 3;
+    // Payload[8-10] = LowAlpha (uint24 大端)
+    int lowAlpha = _readUint24BE(data, i);
+    i += 3;
+    // Payload[11-13] = HighAlpha (uint24 大端)
+    int highAlpha = _readUint24BE(data, i);
+    i += 3;
+    _tempModel.alpha = lowAlpha + highAlpha;
+    // Payload[14-16] = LowBeta (uint24 大端)
+    int lowBeta = _readUint24BE(data, i);
+    i += 3;
+    // Payload[17-19] = HighBeta (uint24 大端)
+    int highBeta = _readUint24BE(data, i);
+    i += 3;
+    _tempModel.beta = lowBeta + highBeta;
+    // Payload[20-22] = LowGamma (uint24 大端)
+    int lowGamma = _readUint24BE(data, i);
+    i += 3;
+    // Payload[23-25] = MiddleGamma (uint24 大端)
+    int midGamma = _readUint24BE(data, i);
+    i += 3;
+    _tempModel.gamma = lowGamma + midGamma;
+    // Payload[26] = AttentionCode (uint8, 固定 0x04)
+    i += 1;
+    // Payload[27] = Attention (uint8)
+    _tempModel.attention = data[i] & 0xFF;
+    i += 1;
+    // Payload[28] = MeditationCode (uint8, 固定 0x05)
+    i += 1;
+    // Payload[29] = Meditation (uint8)
+    _tempModel.meditation = data[i] & 0xFF;
+    i += 1;
+    // Payload[30] = HeartRate (uint8)
+    _tempModel.heartRate = data[i] & 0xFF;
+    i += 1;
+    // Payload[31] = SpO2 (uint8)
+    _tempModel.spO2 = data[i] & 0xFF;
+    i += 1;
+    // Payload[32] = ForeheadTemp (uint8)
+    _tempModel.foreheadTemp = data[i] & 0xFF;
+    i += 1;
+    // Payload[33] = Battery (uint8)
+    _tempModel.battery = data[i] & 0xFF;
+
+    // 推送给 EEGController
     _publishData();
   }
 
-  void _parseEEGPower(List<int> data, int startIndex) {
-    if (startIndex + 2 > data.length) return;
-    int length = data[startIndex + 1];
-    if (startIndex + 2 + length > data.length) return;
-    if (length != 24) return; // 按 TGAM 协议：EEG 功率长度应为 24
-    for (int b = 0; b < 8; b++) {
-      int byteHigh = data[startIndex + 2 + b * 3];
-      int byteMid = data[startIndex + 2 + b * 3 + 1];
-      int byteLow = data[startIndex + 2 + b * 3 + 2];
-      int value = (byteHigh << 16) | (byteMid << 8) | byteLow;
-      switch (b) {
-        case 0:
-          _tempModel.delta = value;
-          break;
-        case 1:
-          _tempModel.theta = value;
-          break;
-        case 2:
-          _tempModel.lowAlpha = value;
-          break;
-        case 3:
-          _tempModel.highAlpha = value;
-          break;
-        case 4:
-          _tempModel.lowBeta = value;
-          break;
-        case 5:
-          _tempModel.highBeta = value;
-          break;
-        case 6:
-          _tempModel.lowGamma = value;
-          break;
-        case 7:
-          _tempModel.midGamma = value;
-          break;
-      }
-    }
+  /// 解析六轴数据包（17 字节 Payload）
+  /// 字段定义见硬件协议文档 4.2 节
+  /// App 不消费这些数据，解析后直接丢弃（不入模型）
+  void _parseImuPacket(List<int> data) {
+    if (data.length != LEN_IMU) return;
+    if (data[0] != PACKET_TYPE_IMU) return;
+
+    // Payload[0] = PacketType (uint8)
+    // Payload[1-4] = SampleCount (uint32 大端) - 不消费
+    // Payload[5-6] = AccX (int16 大端) - 不消费
+    // Payload[7-8] = AccY (int16 大端) - 不消费
+    // Payload[9-10] = AccZ (int16 大端) - 不消费
+    // Payload[11-12] = GyroX (int16 大端) - 不消费
+    // Payload[13-14] = GyroY (int16 大端) - 不消费
+    // Payload[15-16] = GyroZ (int16 大端) - 不消费
+    //
+    // 当前 App 完全不消费六轴数据；此处留作空实现以备后续扩展。
+    // 若将来需要消费，请新增 _tempModel.accX 等字段并在此赋值。
   }
 
-  void _publishData({bool onlyRaw = false}) {
+  /// 读取 3 字节大端无符号整数
+  int _readUint24BE(List<int> data, int index) {
+    return ((data[index] & 0xFF) << 16) |
+        ((data[index + 1] & 0xFF) << 8) |
+        (data[index + 2] & 0xFF);
+  }
+
+  void _publishData() {
     // 复制当前数据到新对象，避免后续修改影响已发布的数据
     final eegData = _tempModel.copy();
-
-    // 更新EEGController
     Get.find<EEGController>().updateEEGData(eegData);
-
-    // 广播（第二阶段）
-    //Get.find<BroadcastService>().broadcastData(eegData);
-
-    if (onlyRaw) {
-      // 如果只更新了原始数据，不清空其他字段，因为大包还会来
-      // 但原始数据是瞬时的，可以保留
-    } else {
-      // 大包解析完后，不清空，等待下一次大包覆盖
-      // 注意信号质量等可能会单独出现，不需要清空
-    }
+    // 广播（暂未启用，保留接口）
+    // Get.find<BroadcastService>().broadcastData(eegData);
   }
 }
 
+/// 脑电数据控制器（聚合状态）
+/// - eegData: 最近一次融合包的完整数据（供 UI 展示）
+/// - updateEEGData: 收到融合包后立即推送给 MyCtrl（每包一推）
 class EEGController extends GetxController {
   final eegData = EEGDataModel().obs;
-  final tempCount = 0.obs;
-  final tempDataAtt = <double>[].obs;
-  final tempDataMed = <double>[].obs;
-  final tempDataDelta = <double>[].obs;
-  final tempDataTheta = <double>[].obs;
-  final tempDataAlpha = <double>[].obs;
-  final tempDataBeta = <double>[].obs;
-  final tempDataGamma = <double>[].obs;
   final MyCtrl myCtrl = Get.put(MyCtrl());
-  static const LOWER = 0;
-  // 每秒执行一次的定时器
-  Timer? _periodicTimer;
-
-  @override
-  void onInit() {
-    super.onInit();
-    _periodicTimer = Timer.periodic(const Duration(seconds: 1), (_) => _onTick());
-  }
-
-  @override
-  void onClose() {
-    _periodicTimer?.cancel();
-    _periodicTimer = null;
-    super.onClose();
-  }
-
-  void _onTick() {
-    // 每秒执行的任务（可按需修改）
-    if (tempCount.value > 1) {
-      double att = tempDataAtt.reduce((a, b) => a > b ? a : b);
-      double med = tempDataMed.reduce((a, b) => a > b ? a : b);
-      double delta = tempDataDelta.reduce((a, b) => a > b ? a : b);
-      double theta = tempDataTheta.reduce((a, b) => a > b ? a : b);
-      double alpha = tempDataAlpha.reduce((a, b) => a > b ? a : b);
-      double beta = tempDataBeta.reduce((a, b) => a > b ? a : b);
-      double gamma = tempDataGamma.reduce((a, b) => a > b ? a : b);
-      myCtrl.pushData([att, med, delta, theta, alpha, beta, gamma]);
-      tempDataAtt.clear();
-      tempDataMed.clear();
-      tempDataDelta.clear();
-      tempDataTheta.clear();
-      tempDataAlpha.clear();
-      tempDataBeta.clear();
-      tempDataGamma.clear();
-
-      tempCount.value = 0;
-    }
-  }
 
   void updateEEGData(EEGDataModel data) {
+    // 更新 UI 展示用的最新数据
     eegData.value = data;
-    if (tempCount.value < 256) {
-      double att = eegData.value.attention?.toDouble() ?? 0.0;
-      double med = eegData.value.meditation?.toDouble() ?? 0.0;
-      double delta = eegData.value.delta?.toDouble() ?? 0.0;
-      double theta = eegData.value.theta?.toDouble() ?? 0.0;
-      double lowAlpha = eegData.value.lowAlpha?.toDouble() ?? 0.0;
-      double highAlpha = eegData.value.highAlpha?.toDouble() ?? 0.0;
-      double alpha = lowAlpha + highAlpha;
-      double lowBeta = eegData.value.lowBeta?.toDouble() ?? 0.0;
-      double highBeta = eegData.value.highBeta?.toDouble() ?? 0.0;
-      double beta = lowBeta + highBeta;
-      double lowGamma = eegData.value.lowGamma?.toDouble() ?? 0.0;
-      double midGamma = eegData.value.midGamma?.toDouble() ?? 0.0;
-      double gamma = lowGamma + midGamma;
-      if (att > LOWER && med > LOWER && delta > LOWER && theta > LOWER && alpha > LOWER && beta > LOWER && gamma > LOWER) {
-        tempDataAtt.add(att);
-        tempDataMed.add(med);
-        tempDataDelta.add(delta);
-        tempDataTheta.add(theta);
-        tempDataAlpha.add(alpha);
-        tempDataBeta.add(beta);
-        tempDataGamma.add(gamma);
 
-        tempCount.value++;
-      }
-    }
+    // 读取 5 波段（alpha/beta/gamma 已是聚合值）
+    final att = data.attention?.toDouble() ?? 0.0;
+    final med = data.meditation?.toDouble() ?? 0.0;
+    final delta = data.delta?.toDouble() ?? 0.0;
+    final theta = data.theta?.toDouble() ?? 0.0;
+    final alpha = data.alpha?.toDouble() ?? 0.0;
+    final beta = data.beta?.toDouble() ?? 0.0;
+    final gamma = data.gamma?.toDouble() ?? 0.0;
+
+    // 每包立即推送给 MyCtrl（不再走 1 秒定时器窗口）
+    myCtrl.pushData([att, med, delta, theta, alpha, beta, gamma]);
   }
 }
 
@@ -354,6 +332,7 @@ class MyBluetoothService extends GetxService {
   StreamSubscription? _connectionSubscription;
   final List<StreamSubscription<List<int>>> _charSubscriptions = [];
   final List<BluetoothCharacteristic> _notifyingCharacteristics = [];
+
   @override
   void onClose() {
     _scanSubscription?.cancel();
@@ -430,7 +409,7 @@ class MyBluetoothService extends GetxService {
             await characteristic.setNotifyValue(true);
 
             final sub = characteristic.lastValueStream.listen((value) {
-              Get.find<TGAMParser>().addBytes(value);
+              Get.find<MultimodalHeadbandParser>().addBytes(value);
             });
             _charSubscriptions.add(sub);
             _notifyingCharacteristics.add(characteristic);
@@ -526,19 +505,20 @@ class BluetoothView extends StatelessWidget {
           return ListView(
             padding: const EdgeInsets.all(20),
             children: [
-              _buildItem('信号质量', data.poorSignal),
+              _buildSignal(data.poorSignal),
               _buildItem('专注度', data.attention),
               _buildItem('放松度', data.meditation),
-              _buildItem('原始数据', data.rawData),
               const Divider(),
               _buildItem('Delta', data.delta),
               _buildItem('Theta', data.theta),
-              _buildItem('低Alpha', data.lowAlpha),
-              _buildItem('高Alpha', data.highAlpha),
-              _buildItem('低Beta', data.lowBeta),
-              _buildItem('高Beta', data.highBeta),
-              _buildItem('低Gamma', data.lowGamma),
-              _buildItem('中Gamma', data.midGamma),
+              _buildItem('Alpha', data.alpha),
+              _buildItem('Beta', data.beta),
+              _buildItem('Gamma', data.gamma),
+              const Divider(),
+              _buildItem('心率', data.heartRate, unit: ' bpm'),
+              _buildItem('血氧', data.spO2, unit: ' %'),
+              _buildItem('额温', data.foreheadTemp, unit: ' ℃'),
+              _buildItem('电池电量', data.battery, unit: ' %'),
             ],
           );
         }),
@@ -546,14 +526,35 @@ class BluetoothView extends StatelessWidget {
     );
   }
 
-  Widget _buildItem(String label, int? value) {
+  Widget _buildItem(String label, int? value, {String unit = ''}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: const TextStyle(fontSize: 18)),
-          Text(value?.toString() ?? '--', style: const TextStyle(fontSize: 18)),
+          Text(
+            value == null ? '--' : '$value$unit',
+            style: const TextStyle(fontSize: 18),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 信号质量：数值 + 档位提示（基于协议 3.3 节建议）
+  Widget _buildSignal(int? value) {
+    final label = EEGDataModel.signalLabel(value);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text('信号质量', style: TextStyle(fontSize: 18)),
+          Text(
+            value == null ? '--' : '$value  ($label)',
+            style: const TextStyle(fontSize: 18),
+          ),
         ],
       ),
     );
@@ -646,7 +647,7 @@ class BluetoothAdmin extends StatelessWidget {
               );
             }),
           ),
-          // 实时数据预览
+          // 实时数据预览（保持简洁，仅做导引）
           Container(
             margin: const EdgeInsets.all(16),
             padding: const EdgeInsets.all(16),
@@ -658,18 +659,18 @@ class BluetoothAdmin extends StatelessWidget {
                   color: Colors.grey,
                   spreadRadius: 0,
                   blurRadius: 1,
-                  offset: const Offset(0, 1), // 阴影方向
+                  offset: const Offset(0, 1),
                 ),
               ],
             ),
             child: Obx(() {
               final data = eegCtrl.eegData.value;
+              final signalLabel = EEGDataModel.signalLabel(data.poorSignal);
               return Column(
                 children: [
-                  Text('专注度: ${data.attention ?? '--'} 放松度: ${data.meditation ?? '--'}', style: const TextStyle(fontSize: 12)),
+                  Text('专注度: ${data.attention ?? '--'}  放松度: ${data.meditation ?? '--'}', style: const TextStyle(fontSize: 12)),
                   ElevatedButton(onPressed: () => Get.to(() => BluetoothView()), child: const Text('查看详细数据')),
-                  Text('佩戴状态码: ${data.poorSignal ?? '--'}', style: const TextStyle(fontSize: 12)),
-                  Text('0正常、0~200信号质量异常、200未佩戴', style: const TextStyle(fontSize: 10)),
+                  Text('佩戴: ${data.poorSignal ?? '--'} ($signalLabel)', style: const TextStyle(fontSize: 12)),
                 ],
               );
             }),
@@ -684,7 +685,7 @@ class AppBinding extends Bindings {
   @override
   void dependencies() {
     Get.put(MyBluetoothService(), permanent: true);
-    Get.put(TGAMParser(), permanent: true);
+    Get.put(MultimodalHeadbandParser(), permanent: true);
     Get.put(BroadcastService(), permanent: true);
     Get.put(BluetoothController());
     Get.put(EEGController());
